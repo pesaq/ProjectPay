@@ -331,7 +331,7 @@ class HomeworkState(StatesGroup):
 @dp.message_handler(lambda message: message.text == "Дневник")
 async def handle_diary(message: types.Message):
     user_class = await get_user_class(message.from_user.id)
-    if user_class == 'unregistered':
+    if user_class is None or user_class == 'unregistered':
         await message.answer("У вас нет прав для выполнения этой команды. Пожалуйста, зарегистрируйтесь снова с помощью токена.")
         return
     user_id = message.from_user.id

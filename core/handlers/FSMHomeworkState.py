@@ -21,7 +21,8 @@ class WorkState(StatesGroup):
 @router.message(lambda message: message.text == "Домашние работы")
 async def handle_works(message: types.Message):
     user_class = await db_helper.get_user_class(message.from_user.id)
-    if user_class == 'unregistered':
+    await db_helper.delete_old_works()
+    if user_class is None or user_class == 'unregistered':
         await message.answer("У вас нет прав для выполнения этой команды. Пожалуйста, зарегистрируйтесь снова с помощью токена.")
         return
     if user_class in [ADMIN, OWNER]:
@@ -125,6 +126,7 @@ async def view_works(message: types.Message):
         async with db.execute("SELECT work, sender, timestamp FROM works WHERE timestamp >= ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60,)) as cursor:
             recent_works = await cursor.fetchall()
 
+    recent_works = sorted(recent_works, key=lambda i: i[2])
     if not recent_works:
         await message.answer("Нет доступных работ.")
     else:

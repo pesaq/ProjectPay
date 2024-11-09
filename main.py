@@ -9,6 +9,7 @@ from core.handlers.FSMArithmeticState import router as ArithmeticRouter
 from core.handlers.FSMInfoState import router as InfoRouter
 from core.handlers.FSMHomeworkState import router as HomeworkRouter
 from core.handlers.FSMDeleteUserState import router as DeleteUserRouter
+from core.handlers.Marks import router as MarksRouter
 
 async def start():
     
@@ -24,6 +25,7 @@ async def start():
     dp.include_router(InfoRouter)
     dp.include_router(HomeworkRouter)
     dp.include_router(DeleteUserRouter)
+    dp.include_router(MarksRouter)
 
     try:
         await dp.start_polling(bot)

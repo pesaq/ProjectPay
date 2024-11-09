@@ -21,7 +21,7 @@ class ArithmeticState(StatesGroup):
 @router.message(lambda message: message.text == "Среднее арифметическое")
 async def handle_arithmetic(message: types.Message, state: FSMContext):
     user_class = await db_helper.get_user_class(message.from_user.id)
-    if user_class == 'unregistered':
+    if user_class is None or user_class == 'unregistered':
         await message.answer("У вас нет прав для выполнения этой команды. Пожалуйста, зарегистрируйтесь снова с помощью токена.")
         return
     keyboard = types.ReplyKeyboardMarkup(keyboard=[

@@ -21,7 +21,8 @@ class InfoState(StatesGroup):
 @router.message(lambda message: message.text == "Информация")
 async def handle_info(message: types.Message):
     user_class = await db_helper.get_user_class(message.from_user.id)
-    if user_class == 'unregistered':
+    await db_helper.delete_old_information()
+    if user_class is None or user_class == 'unregistered':
         await message.answer("У вас нет прав для выполнения этой команды. Пожалуйста, зарегистрируйтесь снова с помощью токена.")
         return
     if user_class in [ADMIN, OWNER]:
@@ -125,7 +126,8 @@ async def view_info(message: types.Message):
     async with aiosqlite.connect('bot_data.db') as db:
         async with db.execute("SELECT info, sender, timestamp FROM information WHERE timestamp >= ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60,)) as cursor:
             recent_info = await cursor.fetchall()
-
+    
+    recent_info = sorted(recent_info, key=lambda i: i[2])
     if not recent_info:
         await message.answer("Нет доступной информации.")
     else:

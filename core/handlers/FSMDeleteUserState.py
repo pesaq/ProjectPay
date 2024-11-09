@@ -173,13 +173,13 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
             async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_delete,)) as cursor:
                 role_result = await cursor.fetchone()
             if not role_result:
-                await callback_query.message.edit_text("Пользователь не найден.")
+                await callback_query.message.edit_text("Пользователь не найден.", reply_markup=None)
                 await state.clear()
                 return
             role = role_result[0]
 
             if role == OWNER:
-                await callback_query.message.edit_text("Невозможно удалить владельца.")
+                await callback_query.message.edit_text("Невозможно удалить владельца.", reply_markup=None)
                 await state.clear()
                 return
 
@@ -200,7 +200,8 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
 
                 user_name, username = user_data if user_data else ("Unknown", "Unknown")
                 await callback_query.message.edit_text(
-                    f"Администратор {user_name} (Username: @{username}) был понижен до пользователя."
+                    f"Администратор {user_name} (Username: @{username}) был понижен до пользователя.",
+                    reply_markup=None
                 )
             else:
                 # Понижаем пользователя до незарегистрированного
@@ -219,7 +220,7 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
 
                 user_name, username = user_data if user_data else ("Unknown", "Unknown")
                 await callback_query.message.edit_text(
-                    f"Пользователь {user_name} (Username: @{username}) был удален."
+                    f"Пользователь {user_name} (Username: @{username}) был удален.", reply_markup=None
                 )
 
         await state.clear()
@@ -234,7 +235,33 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
 @router.callback_query(lambda c: c.data == 'cancel_delete')
 async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
     try:
-        await callback_query.message.edit_text("Удаление отменено.")
+        await callback_query.message.edit_text("Удаление отменено.", reply_markup=None)
         await state.clear()
     except Exception as e:
         print(f"Необработанное исключение при отмене удаления: {e}")
+
+
+# Функция для очистки всех таблиц
+async def clear_all_tables():
+    async with aiosqlite.connect('bot_data.db') as db:
+        tables = ["users", "tokens", "information", "subjects", "homework", "works"]
+        
+        for table in tables:
+            await db.execute(f"DELETE FROM {table}")
+        await db.commit()
+    
+    print("Все таблицы очищены.")
+
+# Обработчик команды /clear_all для владельца
+@router.message(Command(commands=['clear_all']))
+async def handle_clear_all(message: types.Message):
+    user_id = message.from_user.id
+
+    # Проверка прав: только владелец может выполнять команду
+    if user_id != settings.bots.owner_chat_id:
+        await message.reply("У вас нет прав для выполнения этой команды.")
+        return
+    
+    # Очистка таблиц
+    await clear_all_tables()
+    await message.reply("Все таблицы успешно очищены.")

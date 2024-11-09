@@ -19,7 +19,7 @@ settings = get_settings('.env')
 async def add_new_user(message: types.Message):
     user_class = await db_helper.get_user_class(message.from_user.id)
     # Используем существующую проверку прав доступа
-    if not db_helper.has_permission(user_class, ADMIN) or not db_helper.has_permission(user_class, OWNER):
+    if not db_helper.has_permission(user_class, ADMIN) and not db_helper.has_permission(user_class, OWNER):
         await message.answer("У вас нет прав для выполнения этой команды.")
         return
 
@@ -90,6 +90,7 @@ async def send_welcome(message: types.Message, state: FSMContext):
                     role=OWNER,  # Назначаем роль владельца
                     username=message.from_user.username or None
                 )
+                await db_helper.create_subjects_for_student(user_id=user_id)
                 await message.reply("Добро пожаловать, владелец! Пожалуйста, введите ваше ФИО (Фамилия Имя Отчество), чтобы завершить регистрацию.")
                 await state.set_state(AddUserState.waiting_for_fio)
             elif role[0] != OWNER:
@@ -97,6 +98,7 @@ async def send_welcome(message: types.Message, state: FSMContext):
                 await db.execute("UPDATE users SET role = ? WHERE user_id = ?", (OWNER, user_id))
                 await db.commit()
                 await message.reply("Ваша роль была обновлена до владельца. Добро пожаловать!")
+                await db_helper.create_subjects_for_student(user_id=user_id)
                 await db_helper.show_main_menu(message)
             else:
                 await message.reply("Добро пожаловать обратно, владелец!")
@@ -115,7 +117,8 @@ async def send_welcome(message: types.Message, state: FSMContext):
                 )
             except:
                 await message.reply(
-                    "Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен. "
+                    "Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен.\n"
+                    "Для ввода токена используйте команду /token \"токен\"\n"
                     "Если у вас его нет, обратитесь к владельцу или администратору."
                 )
                 return
@@ -125,7 +128,8 @@ async def send_welcome(message: types.Message, state: FSMContext):
             # Если пользователь еще не зарегистрирован
             if role[0] == UNREGISTERED:
                 await message.reply(
-                    "Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен. "
+                    "Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен.\n"
+                    "Для ввода токена используйте команду /token \"токен\"\n"
                     "Если у вас его нет, обратитесь к владельцу или администратору."
                 )
 
@@ -146,6 +150,8 @@ async def process_fio(message: types.Message, state: FSMContext):
         # Завершаем регистрацию для владельца или других пользователей
         await db.execute("UPDATE users SET name = ?, role = ?, type = ? WHERE user_id = ?", (fio, role, "student", user_id))
         await db.commit()
+
+        await db_helper.create_subjects_for_student(user_id=user_id)
 
     await message.reply("Регистрация завершена. Добро пожаловать!")
     await db_helper.show_main_menu(message)
@@ -187,3 +193,301 @@ async def process_token(message: types.Message, state: FSMContext):
         # Помечаем токен как использованный
         await db.execute("UPDATE tokens SET used = 1 WHERE token = ?", (token,))
         await db.commit()
+
+class AddTypeState(StatesGroup):
+    choosing_user = State()
+    confirm_change = State()
+
+@router.message(Command(commands=['addtype']))
+async def addtype_user(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    user_class = await db_helper.get_user_class(user_id)
+
+    # Проверяем права доступа пользователя
+    if not db_helper.has_permission(user_class, OWNER):
+        await message.reply("У вас нет прав для изменения типа пользователя.")
+        return
+
+    try:
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute(
+                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE role = ? AND user_id != ? AND role != ?",
+                (ADMIN, settings.bots.owner_chat_id, OWNER)
+            ) as cursor:
+                available_admins = await cursor.fetchall()
+        
+        if not available_admins:
+            await message.reply("Нет доступных администраторов.")
+            return
+
+        buttons = [
+            [
+                types.InlineKeyboardButton(
+                    text=admin[1],
+                    callback_data=f"change_type_{admin[0]}"
+                ) for admin in available_admins
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="cancel_delete"
+                )
+            ]
+        ]
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+        await state.set_state(AddTypeState.choosing_user)
+        await message.reply("Выберите администратора для изменения типа на teacher:", reply_markup=keyboard)
+
+    except aiosqlite.Error as e:
+        await message.reply("Произошла ошибка при получении списка администраторов. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при получении администраторов для изменения: {e}")
+
+# Обработка выбора пользователя или администратора для удаления
+@router.callback_query(
+    lambda c: c.data and (c.data.startswith('change_type_')),
+    AddTypeState.choosing_user
+)
+async def process_change_type(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        user_id_to_delete = int(callback_query.data.split('_')[2])
+        is_admin = callback_query.data.startswith('change_type_')
+
+        await state.update_data(user_id_to_delete=user_id_to_delete, is_admin=is_admin)
+
+        # Запрашиваем подтверждение на удаление
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="Подтвердить",
+                    callback_data="confirm_delete"
+                ),
+                types.InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="cancel_delete"
+                )
+            ]
+        ]
+    )
+
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute(
+                "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
+                (user_id_to_delete,)
+            ) as cursor:
+                user_data = await cursor.fetchone()
+
+        user_name, username = user_data if user_data else ("Unknown", "Unknown")
+        await state.set_state(AddTypeState.confirm_change)
+        await callback_query.message.edit_text(
+            f"Вы уверены, что хотите изменить роль администратора {user_name} (Username: @{username})?",
+            reply_markup=keyboard
+        )
+    except aiosqlite.Error as e:
+        await callback_query.message.edit_text("Произошла ошибка при получении данных пользователя. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при обработке выбора пользователя для изменения типа: {e}")
+    except Exception as e:
+        await callback_query.message.edit_text("Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.")
+        print(f"Необработанное исключение при обработке выбора пользователя для изменения типа: {e}")
+
+# Подтверждение удаления пользователя или администратора
+@router.callback_query(lambda c: c.data == 'confirm_delete', AddTypeState.confirm_change)
+async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        user_id_to_change = data['user_id_to_delete']
+        is_admin = data.get('is_admin', False)
+
+        async with aiosqlite.connect('bot_data.db') as db:
+            # Получаем роль пользователя перед изменением
+            async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_change,)) as cursor:
+                role_result = await cursor.fetchone()
+            if not role_result:
+                await callback_query.message.edit_text("Администратор не найден.", reply_markup=None)
+                await state.clear()
+                return
+            role = role_result[0]
+
+            if role == OWNER:
+                await callback_query.message.edit_text("Невозможно изменить владельца.", reply_markup=None)
+                await state.clear()
+                return
+
+            if is_admin:
+                await db.execute(
+                    "UPDATE users SET type = ? WHERE user_id = ?",
+                    ("teacher", user_id_to_change)
+                )
+                await db.commit()
+
+                # Получаем имя и username для уведомления
+                async with db.execute(
+                    "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
+                    (user_id_to_change,)
+                ) as cursor:
+                    user_data = await cursor.fetchone()
+
+                user_name, username = user_data if user_data else ("Unknown", "Unknown")
+                await callback_query.message.edit_text(
+                    f"Тип администратора {user_name} (Username: @{username}) был иземнен до teacher.",
+                    reply_markup=None
+                )
+
+        await state.clear()
+    except aiosqlite.Error as e:
+        await callback_query.message.edit_text("Произошла ошибка при изменении типа пользователя. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при подтверждении изменения типа пользователя: {e}")
+    except Exception as e:
+        await callback_query.message.edit_text("Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.")
+        print(f"Необработанное исключение при подтверждении изменения типа пользователя: {e}")
+
+
+class DelTypeState(StatesGroup):
+    choosing_user = State()
+    confirm_delete = State()
+
+
+@router.message(Command(commands=['deltype']))
+async def deltype_user(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    user_class = await db_helper.get_user_class(user_id)
+
+    # Проверяем права доступа пользователя
+    if not db_helper.has_permission(user_class, OWNER):
+        await message.reply("У вас нет прав для изменения типа пользователя.")
+        return
+
+    try:
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute(
+                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE role = ? AND user_id != ? AND role != ?",
+                (ADMIN, settings.bots.owner_chat_id, OWNER)
+            ) as cursor:
+                available_admins = await cursor.fetchall()
+        
+        if not available_admins:
+            await message.reply("Нет доступных администраторов.")
+            return
+
+        buttons = [
+            [
+                types.InlineKeyboardButton(
+                    text=admin[1],
+                    callback_data=f"change_type_{admin[0]}"
+                ) for admin in available_admins
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="cancel_delete"
+                )
+            ]
+        ]
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+        await state.set_state(DelTypeState.choosing_user)
+        await message.reply("Выберите администратора для изменения типа на student:", reply_markup=keyboard)
+
+    except aiosqlite.Error as e:
+        await message.reply("Произошла ошибка при получении списка администраторов. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при получении администраторов для изменения: {e}")
+
+# Обработка выбора пользователя или администратора для удаления
+@router.callback_query(
+    lambda c: c.data and (c.data.startswith('change_type_')),
+    DelTypeState.choosing_user
+)
+async def process_change_type(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        user_id_to_delete = int(callback_query.data.split('_')[2])
+        is_admin = callback_query.data.startswith('change_type_')
+
+        await state.update_data(user_id_to_delete=user_id_to_delete, is_admin=is_admin)
+
+        # Запрашиваем подтверждение на удаление
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="Подтвердить",
+                    callback_data="confirm_delete"
+                ),
+                types.InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="cancel_delete"
+                )
+            ]
+        ]
+    )
+
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute(
+                "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
+                (user_id_to_delete,)
+            ) as cursor:
+                user_data = await cursor.fetchone()
+
+        user_name, username = user_data if user_data else ("Unknown", "Unknown")
+        await state.set_state(DelTypeState.confirm_delete)
+        await callback_query.message.edit_text(
+            f"Вы уверены, что хотите изменить роль администратора {user_name} (Username: @{username})?",
+            reply_markup=keyboard
+        )
+    except aiosqlite.Error as e:
+        await callback_query.message.edit_text("Произошла ошибка при получении данных пользователя. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при обработке выбора пользователя для изменения типа: {e}")
+    except Exception as e:
+        await callback_query.message.edit_text("Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.")
+        print(f"Необработанное исключение при обработке выбора пользователя для изменения типа: {e}")
+
+# Подтверждение удаления пользователя или администратора
+@router.callback_query(lambda c: c.data == 'confirm_delete', DelTypeState.confirm_delete)
+async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        user_id_to_change = data['user_id_to_delete']
+        is_admin = data.get('is_admin', False)
+
+        async with aiosqlite.connect('bot_data.db') as db:
+            # Получаем роль пользователя перед изменением
+            async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_change,)) as cursor:
+                role_result = await cursor.fetchone()
+            if not role_result:
+                await callback_query.message.edit_text("Администратор не найден.", reply_markup=None)
+                await state.clear()
+                return
+            role = role_result[0]
+
+            if role == OWNER:
+                await callback_query.message.edit_text("Невозможно изменить владельца.", reply_markup=None)
+                await state.clear()
+                return
+
+            if is_admin:
+                await db.execute(
+                    "UPDATE users SET type = ? WHERE user_id = ?",
+                    ("student", user_id_to_change)
+                )
+                await db.commit()
+
+                # Получаем имя и username для уведомления
+                async with db.execute(
+                    "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
+                    (user_id_to_change,)
+                ) as cursor:
+                    user_data = await cursor.fetchone()
+
+                user_name, username = user_data if user_data else ("Unknown", "Unknown")
+                await callback_query.message.edit_text(
+                    f"Тип администратора {user_name} (Username: @{username}) был иземнен до student.",
+                    reply_markup=None
+                )
+
+        await state.clear()
+    except aiosqlite.Error as e:
+        await callback_query.message.edit_text("Произошла ошибка при изменении типа пользователя. Пожалуйста, попробуйте позже.")
+        print(f"Ошибка базы данных при подтверждении изменения типа пользователя: {e}")
+    except Exception as e:
+        await callback_query.message.edit_text("Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.")
+        print(f"Необработанное исключение при подтверждении изменения типа пользователя: {e}")

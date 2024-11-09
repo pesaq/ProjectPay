@@ -77,6 +77,14 @@ class DataBaseHelper:
                 )
             ''')
 
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS marks (
+                    user_id INTEGER,
+                    subject_name TEXT NOT NULL,
+                    grades TEXT NOT NULL
+                )
+            ''')
+
             # Добавление предустановленных предметов, если таблица subjects пуста
             async with db.execute("SELECT COUNT(*) FROM subjects") as cursor:
                 subject_count = await cursor.fetchone()
@@ -114,7 +122,7 @@ class DataBaseHelper:
         if user_id == settings.bots.owner_chat_id:
             return OWNER
         role = await self.get_user_role(user_id)
-        return role if role else USER
+        return role if role else None
 
     # Функция для добавления нового пользователя в базу
     async def add_user(self, user_id, name, role, username, user_type="student", additional_info=None):
@@ -140,6 +148,9 @@ class DataBaseHelper:
                 ),
                 types.KeyboardButton(
                     text='Домашние работы'
+                ),
+                types.KeyboardButton(
+                    text='Оценки'
                 )
             ]
         ], resize_keyboard=True)
@@ -163,6 +174,54 @@ class DataBaseHelper:
             return True
         return False
 
+    # Функция для удаления работы старше 8 дней
+    async def delete_old_works(self):
+        threshold = time.time() - 8 * 24 * 60 * 60
+        async with aiosqlite.connect('bot_data.db') as db:
+            await db.execute("DELETE FROM works WHERE timestamp < ?", (threshold,))
+            await db.commit()
+    
+    # Функция для удаления информации старше 8 дней
+    async def delete_old_information(self):
+        threshold = time.time() - 8 * 24 * 60 * 60
+        async with aiosqlite.connect('bot_data.db') as db:
+            await db.execute("DELETE FROM information WHERE timestamp < ?", (threshold,))
+            await db.commit()
+    
+    async def create_subjects_for_student(self, user_id):
+        async with aiosqlite.connect('bot_data.db') as db:
+            # Проверка наличия записей по user_id
+            async with db.execute('SELECT COUNT(*) FROM marks WHERE user_id = ?', (user_id,)) as cursor:
+                count = await cursor.fetchone()
 
+            # Если записи уже существуют, выходим
+            if count[0] > 0:
+                return
+
+            # Если записей нет, выполняем вставку
+            await db.execute('''INSERT INTO marks (subject_name, grades, user_id) VALUES 
+            (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?),
+            (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)''',
+            (
+                'Русский язык', '', user_id,
+                'Английский язык', '', user_id,
+                'Французский язык', '', user_id,
+                'Химия', '', user_id,
+                'Биология', '', user_id,
+                'Физика', '', user_id,
+                'История', '', user_id,
+                'Обществознание', '', user_id,
+                'Литература', '', user_id,
+                'Алгебра', '', user_id,
+                'Геометрия', '', user_id,
+                'Теория вероятностей', '', user_id,
+                'Музыка', '', user_id,
+                'Информатика', '', user_id,
+                'География', '', user_id,
+                'Проект', '', user_id,
+                'ОБЗР', '', user_id,
+                'Физическая культура', '', user_id
+            ))
+            await db.commit()
 
 db_helper = DataBaseHelper()

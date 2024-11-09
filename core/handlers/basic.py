@@ -4,9 +4,22 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
+import aiosqlite
+
 from database.db_helper import db_helper
 
 router = Router()
+
+@router.message(Command(commands=['start']))
+async def get_start(message: Message):
+    user_id = message.from_user.id
+    role = await db_helper.get_user_role(user_id=user_id)
+
+    if role is None or role == "unregistered":
+        await message.answer('Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, зарегистрируйтесь с помощью команды /registration')
+    else:
+        await db_helper.show_main_menu(message)
+
 
 @router.message(Command(commands=['help']))
 async def send_help(message: types.Message):
@@ -18,6 +31,9 @@ async def send_help(message: types.Message):
                              "/makeAdmin - повысить пользователя до администратора\n"
                              "/deleteUser - удалить пользователя\n"
                              "/deleteAdmin - удалить администратора\n"
+                             "/addtype - изменить тип администратора на \"teacher\"\n"
+                             "/deltype - изменить тип администратора на \"student\"\n"
+                             "(/)clear_all - очистить базу данных (ручной ввод)\n"
                              "/help - справка")
     elif user_class == 'admin':  # Проверка для администратора
         await message.answer("Доступные команды для администратора:\n"
