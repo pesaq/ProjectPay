@@ -211,8 +211,8 @@ async def addtype_user(message: types.Message, state: FSMContext):
     try:
         async with aiosqlite.connect('bot_data.db') as db:
             async with db.execute(
-                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE role = ? AND user_id != ? AND role != ?",
-                (ADMIN, settings.bots.owner_chat_id, OWNER)
+                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role = ? AND user_id != ? AND role != ?",
+                ("student", ADMIN, settings.bots.owner_chat_id, OWNER)
             ) as cursor:
                 available_admins = await cursor.fetchall()
         
@@ -361,8 +361,8 @@ async def deltype_user(message: types.Message, state: FSMContext):
     try:
         async with aiosqlite.connect('bot_data.db') as db:
             async with db.execute(
-                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE role = ? AND user_id != ? AND role != ?",
-                (ADMIN, settings.bots.owner_chat_id, OWNER)
+                "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role = ? AND user_id != ? AND role != ?",
+                ("teacher", ADMIN, settings.bots.owner_chat_id, OWNER)
             ) as cursor:
                 available_admins = await cursor.fetchall()
         

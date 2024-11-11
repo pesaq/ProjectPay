@@ -133,25 +133,16 @@ class DataBaseHelper:
             ''', (user_id, name, role, username, user_type, additional_info))
             await db.commit()
 
-    # Главное меню с кнопками школьного функционала
     async def show_main_menu(self, message: types.Message):
         markup = types.ReplyKeyboardMarkup(keyboard=[
             [
-                types.KeyboardButton(
-                    text='Дневник'
-                ),
-                types.KeyboardButton(
-                    text='Среднее арифметическое'
-                ),
-                types.KeyboardButton(
-                    text='Информация'
-                ),
-                types.KeyboardButton(
-                    text='Домашние работы'
-                ),
-                types.KeyboardButton(
-                    text='Оценки'
-                )
+                types.KeyboardButton(text='Дневник'),
+                types.KeyboardButton(text='Среднее арифметическое'),
+                types.KeyboardButton(text='Информация')
+            ],
+            [
+                types.KeyboardButton(text='Домашние работы'),
+                types.KeyboardButton(text='Оценки')
             ]
         ], resize_keyboard=True)
         await message.answer("Главное меню:", reply_markup=markup)

@@ -71,6 +71,7 @@ def format_grades(grades_text):
 class EditMarksState(StatesGroup):
     choosing_user = State()
     choosing_subject = State()
+    choosing_action = State()
     choosing_mark = State()
 
 # Обработка команды изменения оценок
@@ -88,8 +89,8 @@ async def edit_user_mark_command(message: types.Message, state: FSMContext):
                 try:
                     async with aiosqlite.connect('bot_data.db') as db:
                         async with db.execute(
-                            "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ?",
-                            ("student",)
+                            "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role IN (?, ?, ?)",
+                            ("student", USER, ADMIN, OWNER)
                         ) as cursor:
                             available_users = await cursor.fetchall()
 
@@ -97,20 +98,28 @@ async def edit_user_mark_command(message: types.Message, state: FSMContext):
                         await message.reply("Нет доступных пользователей.")
                         return
 
-                    buttons = [
-                        [
-                            types.InlineKeyboardButton(
-                                text=user[1],
-                                callback_data=f"marks_user_{user[0]}"
-                            ) for user in available_users
-                        ],
-                        [
-                            types.InlineKeyboardButton(
-                                text="Отмена",
-                                callback_data="cancel_edit"
-                            )
-                        ]
-                    ]
+                    buttons = []
+                    row = []
+
+                    for user in available_users:
+                        row.append(types.InlineKeyboardButton(
+                            text=user[1],
+                            callback_data=f"marks_user_{user[0]}"
+                        ))
+
+                        if len(row) == 1:  # Когда в ряду 3 кнопки
+                            buttons.append(row)
+                            row = []  # Сбросить ряд
+
+                    if row:  # Добавить оставшиеся кнопки, если они есть
+                        buttons.append(row)
+
+                    buttons.append([
+                        types.InlineKeyboardButton(
+                            text="Отмена",
+                            callback_data="cancel_edit"
+                        )
+                    ])
 
                     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
                     await state.set_state(EditMarksState.choosing_user)
@@ -143,7 +152,7 @@ async def process_edit_mark_user(callback_query: types.CallbackQuery, state: FSM
 
         user_name, username = user_data if user_data else ("Unknown", "Unknown")
         await callback_query.message.answer(
-            f"По какому предмету вы хотите поставить оценку пользователю {user_name} (Username: @{username})?",
+            f"По какому предмету вы хотите изменить оценку пользователю {user_name} (Username: @{username})?",
             reply_markup=markup
         )
         await state.set_state(EditMarksState.choosing_subject)
@@ -155,36 +164,100 @@ async def process_edit_mark_user(callback_query: types.CallbackQuery, state: FSM
         print(f"Необработанное исключение при обработке выбора пользователя для удаления: {e}")
 
 @router.message(EditMarksState.choosing_subject)
-async def confirm_delete_user(message: types.Message, state: FSMContext):
+async def get_choosing_subject(message: types.Message, state: FSMContext):
     await state.update_data(subject_to_edit=message.text)
-    data = await state.get_data()
+
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [
             types.InlineKeyboardButton(
-                text='н',
-                callback_data='num_H'
+                text='Добавить оценку',
+                callback_data='action_add'
             ),
             types.InlineKeyboardButton(
-                text='2',
-                callback_data='num_2'
-            ),
+                text='Удалить оценку',
+                callback_data='action_del'
+            )
+        ],
+        [
             types.InlineKeyboardButton(
-                text='3',
-                callback_data='num_3'
-            ),
-            types.InlineKeyboardButton(
-                text='4',
-                callback_data='num_4'
-            ),
-            types.InlineKeyboardButton(
-                text='5',
-                callback_data='num_5'
+                text='Другой предмет',
+                callback_data='cancel_action'
             )
         ]
     ])
 
-    await message.answer('Выберите оценку, которую вы хотите поставить:', reply_markup=keyboard)
-    await state.set_state(EditMarksState.choosing_mark)
+    await message.answer('Выберите действие с оценками:', reply_markup=keyboard)
+    await state.set_state(EditMarksState.choosing_action)
+
+@router.callback_query(lambda c: c.data.startswith('action_'), EditMarksState.choosing_action)
+async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMContext):
+    selected_action = callback_query.data.split('_')[1]
+    data = await state.get_data()
+    user_id_to_edit = data['user_id_to_edit']
+    subject_to_edit = data['subject_to_edit']
+    if selected_action == 'add':
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text='н',
+                    callback_data='num_H'
+                ),
+                types.InlineKeyboardButton(
+                    text='2',
+                    callback_data='num_2'
+                ),
+                types.InlineKeyboardButton(
+                    text='3',
+                    callback_data='num_3'
+                ),
+                types.InlineKeyboardButton(
+                    text='4',
+                    callback_data='num_4'
+                ),
+                types.InlineKeyboardButton(
+                    text='5',
+                    callback_data='num_5'
+                ),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text='Назад',
+                    callback_data='cancel_mark'
+                )
+            ]
+        ])
+        await callback_query.message.answer('Выберите оценку, которую вы хотите поставить:', reply_markup=keyboard)
+        await state.set_state(EditMarksState.choosing_mark)
+    elif selected_action == 'del':
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute("SELECT grades FROM marks WHERE subject_name = ? AND user_id = ?", (subject_to_edit, user_id_to_edit)) as cursor:
+                marks_data = await cursor.fetchone()
+                marks_data = marks_data[0]
+                marks_data = list(mark for mark in marks_data.split(','))
+            if marks_data != ['']:
+                buttons = []
+                for i in range(0, len(marks_data), 7):
+                    row = [
+                        types.InlineKeyboardButton(
+                            text=mark,
+                            callback_data=f"mark_del_{mark}"
+                        ) for mark in marks_data[i:i + 7]
+                    ]
+                    buttons.append(row)
+                
+                buttons.append([
+                    types.InlineKeyboardButton(
+                        text="Назад",
+                        callback_data="cancel_del_mark"
+                    )
+                ])
+                
+                keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+                
+                await callback_query.message.edit_text('Выберите оценку, которую хотите удалить:', reply_markup=keyboard)
+                await state.set_state(EditMarksState.choosing_mark)
+            else:
+                await callback_query.message.answer('У ученика нету оценок по этому предмету')
 
 @router.callback_query(lambda c: c.data.startswith('num_'), EditMarksState.choosing_mark)
 async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
@@ -208,15 +281,60 @@ async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
     
         await db.commit()
 
+@router.callback_query(lambda c: c.data.startswith('mark_del_'), EditMarksState.choosing_mark)
+async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
+    mark_to_delete = callback_query.data.split('_')[2]
+    data = await state.get_data()
+    user_id_to_edit = data['user_id_to_edit']
+    subject_to_edit = data['subject_to_edit']
 
-@router.callback_query(lambda c: c.data == 'cancel_edit')
-async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
-    try:
-        await callback_query.message.edit_text("Изменение отменено.", reply_markup=None)
-        await state.clear()
-    except Exception as e:
-        print(f"Необработанное исключение при отмене: {e}")
+    async with aiosqlite.connect('bot_data.db') as db:
+        async with db.execute("SELECT grades FROM marks WHERE user_id = ? AND subject_name = ?", (user_id_to_edit, subject_to_edit)) as cursor:
+            row = await cursor.fetchone()
 
+        if row:
+            grades = row[0].split(',')
+            count = 0
+            new_grades = []
+
+            for grade in grades:
+                if grade == mark_to_delete and count == 0:
+                    count += 1  # Удаляем только первую найденную оценку
+                else:
+                    new_grades.append(grade)
+
+            # Обновляем строку с новыми оценками
+            new_grades_str = ','.join(new_grades)
+            await db.execute("UPDATE marks SET grades = ? WHERE user_id = ? AND subject_name = ?", (new_grades_str, user_id_to_edit, subject_to_edit))
+            await db.commit()
+            async with aiosqlite.connect('bot_data.db') as db:
+                async with db.execute("SELECT grades FROM marks WHERE subject_name = ? AND user_id = ?", (subject_to_edit, user_id_to_edit)) as cursor:
+                    marks_data = await cursor.fetchone()
+                    marks_data = marks_data[0]
+                    marks_data = list(mark for mark in marks_data.split(','))
+                if marks_data != ['']:
+                    buttons = []
+                    for i in range(0, len(marks_data), 7):
+                        row = [
+                            types.InlineKeyboardButton(
+                                text=mark,
+                                callback_data=f"mark_del_{mark}"
+                            ) for mark in marks_data[i:i + 7]
+                        ]
+                        buttons.append(row)
+
+                    buttons.append([
+                        types.InlineKeyboardButton(
+                            text="Отмена",
+                            callback_data="cancel_del_mark"
+                        )
+                    ])
+
+                    keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+                    await callback_query.message.edit_reply_markup(reply_markup=keyboard)
+                    await callback_query.message.answer(f'Оценка {mark_to_delete} была удалена')
+                else:
+                    await callback_query.message.answer('У ученика нету оценок по этому предмету')
 
 @router.message(lambda message: message.text == "Посмотреть оценки")
 async def student_grades_handler(message: types.Message):
@@ -235,19 +353,84 @@ async def student_grades_handler(message: types.Message):
             await message.answer("Нет данных об оценках.")
             return
  
-        # Формируем текст для каждого предмета и его оценки в виде кода
-        response_text = "Ваши оценки по предметам:\n\n"
+        # Формируем вывод для каждого предмета и его оценок
         for subject, grades_text in subjects:
             # Извлекаем все числовые оценки из строки для расчета среднего
             grades = [int(num) for num in re.findall(r'\d+', grades_text)]
             subject_mean = await calculate_mean(grades)
  
-            # Форматируем вывод для каждого предмета: оценки + среднее арифметическое
-            response_text += f"`{subject}: {grades_text}`  <b>Средний балл: {subject_mean:.2f}</b>\n"
- 
-        # Отправляем сообщение с оценками
-        await message.answer(response_text, parse_mode=ParseMode.HTML)
+            # Отправляем оценки и средний балл в отдельных сообщениях
+            await message.answer(f"`{subject}: {grades_text}`", parse_mode=ParseMode.MARKDOWN)
+            await message.answer(f"<b>Средний балл по предмету {subject}: {subject_mean:.2f}</b>", parse_mode=ParseMode.HTML)
  
         # Сообщение о возвращении в главное меню
         await message.answer("Возвращение в главное меню...")
         await db_helper.show_main_menu(message)
+
+@router.callback_query(lambda c: c.data == 'cancel_edit')
+async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        await callback_query.message.edit_text("Изменение отменено.", reply_markup=None)
+        await db_helper.show_main_menu(callback_query.message)
+        await state.clear()
+    except Exception as e:
+        print(f"Необработанное исключение при отмене: {e}")
+
+@router.callback_query(lambda c: c.data == 'cancel_action')
+async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
+    
+    keyboard_buttons = [[types.KeyboardButton(text=subject) for subject in subjects[i:i + 2]] for i in range(0, len(subjects), 2)]
+    markup = types.ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
+
+    await callback_query.message.answer("Выберите предмет:", reply_markup=markup)
+    await state.set_state(EditMarksState.choosing_subject)
+
+@router.callback_query(lambda c: c.data == 'cancel_mark')
+async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
+
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(
+                text='Добавить оценку',
+                callback_data='action_add'
+            ),
+            types.InlineKeyboardButton(
+                text='Удалить оценку',
+                callback_data='action_del'
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text='Другой предмет',
+                callback_data='cancel_action'
+            )
+        ]
+    ])
+
+    await callback_query.message.answer('Выберите действие с оценками:', reply_markup=keyboard)
+    await state.set_state(EditMarksState.choosing_action)
+
+@router.callback_query(lambda c: c.data == 'cancel_del_mark')
+async def cancel_delete(callback_query: types.CallbackQuery, state: FSMContext):
+
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(
+                text='Добавить оценку',
+                callback_data='action_add'
+            ),
+            types.InlineKeyboardButton(
+                text='Удалить оценку',
+                callback_data='action_del'
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text='Другой предмет',
+                callback_data='cancel_action'
+            )
+        ]
+    ])
+
+    await callback_query.message.answer('Выберите действие с оценками:', reply_markup=keyboard)
+    await state.set_state(EditMarksState.choosing_action)
