@@ -6,9 +6,12 @@ from aiogram.fsm.context import FSMContext
 
 import aiosqlite
 
-from database.db_helper import db_helper
+from database.db_helper import db_helper, Class9AState, Class9BState
 
 router = Router()
+
+class ChooseClassState(StatesGroup):
+    action = State()
 
 @router.message(Command(commands=['start']))
 async def get_start(message: Message):
@@ -18,8 +21,17 @@ async def get_start(message: Message):
     if role is None or role == "unregistered":
         await message.answer('Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, зарегистрируйтесь с помощью команды /registration')
     else:
-        await db_helper.show_main_menu(message)
+        await db_helper.show_choose_class_menu(message)
 
+@router.message(Class9AState.action, F.text == "Назад")
+async def handle_back_to_main_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await db_helper.show_choose_class_menu(message)
+
+@router.message(Class9BState.action, F.text == "Назад")
+async def handle_back_to_main_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await db_helper.show_choose_class_menu(message)
 
 @router.message(Command(commands=['help']))
 async def send_help(message: types.Message):

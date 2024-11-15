@@ -38,7 +38,7 @@ async def handle_arithmetic(message: types.Message, state: FSMContext):
 async def cancel_arithmetic(message: types.Message, state: FSMContext):
     await message.answer("Действие отменено.", reply_markup=types.ReplyKeyboardRemove())
     await state.clear()
-    await db_helper.show_main_menu(message)
+    await db_helper.show_choose_class_menu(message)
 
 @router.message(ArithmeticState.waiting_for_arithmetic_entry)
 async def process_arithmetic(message: types.Message, state: FSMContext):
@@ -51,7 +51,7 @@ async def process_arithmetic(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("Пожалуйста, введите только слитное число. Это число автоматически разделится на цифры, из которых будет получено среднее арифметическое.")
     await state.clear()
-    await db_helper.show_main_menu(message)
+    await db_helper.show_choose_class_menu(message)
 
 class InfoState(StatesGroup):
     waiting_for_info_entry = State()

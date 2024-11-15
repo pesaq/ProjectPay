@@ -41,7 +41,7 @@ async def process_subject_selection(message: types.Message, state: FSMContext):
 
     if subject == "Назад":
         await state.clear()
-        await db_helper.show_main_menu(message)
+        await db_helper.show_choose_class_menu(message)
         return
 
     if subject in subjects:
@@ -108,7 +108,7 @@ async def process_homework_entry(message: types.Message, state: FSMContext):
 
     if homework_text.lower() == "отмена":
         await state.clear()
-        await db_helper.show_main_menu(message)
+        await db_helper.show_choose_class_menu(message)
         return
 
     # Сохраняем домашнее задание в базе данных
@@ -122,4 +122,4 @@ async def process_homework_entry(message: types.Message, state: FSMContext):
 
     await message.answer(f"Домашнее задание по предмету {subject['subject']} успешно записано.")
     await state.clear()
-    await db_helper.show_main_menu(message)
+    await db_helper.show_choose_class_menu(message)

@@ -3,12 +3,20 @@ import time
 import random
 
 
-from aiogram import types, filters
+from aiogram import types
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from user_classes import *
 from core.settings import get_settings
 
 settings = get_settings('.env')
+
+class Class9AState(StatesGroup):
+    action = State()
+
+class Class9BState(StatesGroup):
+    action = State()
 
 class DataBaseHelper:
 
@@ -21,7 +29,8 @@ class DataBaseHelper:
                 CREATE TABLE IF NOT EXISTS information (
                     info TEXT,
                     sender TEXT,
-                    timestamp REAL
+                    timestamp REAL,
+                    class_name TEXT
                 )
             ''')
 
@@ -33,6 +42,7 @@ class DataBaseHelper:
                     role TEXT,
                     username TEXT,
                     type TEXT DEFAULT 'student',
+                    class_name TEXT,
                     additional_info TEXT
                 )
             ''')
@@ -42,6 +52,7 @@ class DataBaseHelper:
                 CREATE TABLE IF NOT EXISTS tokens (
                     token TEXT PRIMARY KEY,
                     token_type TEXT,
+                    token_class TEXT,
                     expires_at REAL,
                     used BOOLEAN
                 )
@@ -73,6 +84,7 @@ class DataBaseHelper:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     work TEXT NOT NULL,
                     sender TEXT NOT NULL,
+                    class_name TEXT,
                     timestamp REAL NOT NULL
                 )
             ''')
@@ -95,12 +107,12 @@ class DataBaseHelper:
         print("База данных инициализирована, таблицы созданы и предустановленные предметы добавлены.")
 
     # Асинхронная функция для добавления пользователя в базу данных
-    async def add_user(self, user_id, name, role, username, user_type, additional_info):
+    async def add_user(self, user_id, name, role, username, user_type, class_name):
         async with aiosqlite.connect('bot_data.db') as db:
             await db.execute('''
-                INSERT OR REPLACE INTO users (user_id, name, role, username, type, additional_info)
+                INSERT OR REPLACE INTO users (user_id, name, role, username, type, class_name)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (user_id, name, role, username, user_type, additional_info))
+            ''', (user_id, name, role, username, user_type, class_name))
             await db.commit()
 
     # Асинхронная функция для получения роли пользователя
@@ -123,38 +135,77 @@ class DataBaseHelper:
             return OWNER
         role = await self.get_user_role(user_id)
         return role if role else None
+    
+    async def get_user_class_name(self, user_id):
+        async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute("SELECT class_name FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else None
 
     # Функция для добавления нового пользователя в базу
-    async def add_user(self, user_id, name, role, username, user_type="student", additional_info=None):
+    async def add_user(self, user_id, name, role, username, user_type="student", class_name=None):
         async with aiosqlite.connect('bot_data.db') as db:
             await db.execute('''
-                INSERT INTO users (user_id, name, role, username, type, additional_info)
+                INSERT INTO users (user_id, name, role, username, type, class_name)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (user_id, name, role, username, user_type, additional_info))
+            ''', (user_id, name, role, username, user_type, class_name))
             await db.commit()
 
-    async def show_main_menu(self, message: types.Message):
+    async def show_choose_class_menu(self, message: types.Message):
         markup = types.ReplyKeyboardMarkup(keyboard=[
             [
+                types.KeyboardButton(text='9А'),
+                types.KeyboardButton(text='9Б'),
                 types.KeyboardButton(text='Дневник'),
-                types.KeyboardButton(text='Среднее арифметическое'),
-                types.KeyboardButton(text='Информация')
+                types.KeyboardButton(text='Среднее арифметическое')
+            ]
+        ])
+        await message.answer("Выберите класс для взаимодействия:", reply_markup=markup)
+
+    async def show_9a_main_menu(self, message: types.Message, state: FSMContext):
+        markup = types.ReplyKeyboardMarkup(keyboard=[
+            [
+                types.KeyboardButton(text='Информация (9А)'),
+                types.KeyboardButton(text='Домашние работы (9А)'),
+                types.KeyboardButton(text='Оценки (9А)')
             ],
             [
-                types.KeyboardButton(text='Домашние работы'),
-                types.KeyboardButton(text='Оценки')
+                types.KeyboardButton(text='Назад')
             ]
         ], resize_keyboard=True)
         await message.answer("Главное меню:", reply_markup=markup)
+        await state.set_state(Class9AState.action)
+    
+    async def show_9b_main_menu(self, message: types.Message, state: FSMContext):
+        markup = types.ReplyKeyboardMarkup(keyboard=[
+            [
+                types.KeyboardButton(text='Информация (9Б)'),
+                types.KeyboardButton(text='Домашние работы (9Б)'),
+                types.KeyboardButton(text='Оценки (9Б)')
+            ],
+            [
+                types.KeyboardButton(text='Назад')
+            ]
+        ], resize_keyboard=True)
+        await message.answer("Главное меню:", reply_markup=markup)
+        await state.set_state(Class9BState.action)
 
-    async def is_unique_name(self, name):
+    async def is_unique_name(self, name, user_id=None):
         async with aiosqlite.connect('bot_data.db') as db:
-            async with db.execute("SELECT user_id FROM users WHERE name = ?", (name,)) as cursor:
-                result = await cursor.fetchone()
-                return result is None
+            query = "SELECT user_id FROM users WHERE name = ?"
+            
+            if user_id is not None:
+                query += " AND user_id != ?"
+                async with db.execute(query, (name, user_id)) as cursor:
+                    result = await cursor.fetchone()
+            else:
+                async with db.execute(query, (name,)) as cursor:
+                    result = await cursor.fetchone()
+            
+            return result is None
 
-    async def generate_token(self, token_type):
-        return f"{token_type}_{int(time.time())}_{random.randint(1000, 9999)}"
+    async def generate_token(self, token_type, token_class):
+        return f"{token_type}_{token_class}_{int(time.time())}_{random.randint(1000, 9999)}"
 
     def has_permission(self, user_class, required_class):
         if user_class == OWNER:

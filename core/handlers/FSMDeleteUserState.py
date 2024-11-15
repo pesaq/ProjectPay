@@ -206,8 +206,8 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
             else:
                 # Понижаем пользователя до незарегистрированного
                 await db.execute(
-                    "UPDATE users SET role = ? WHERE user_id = ?",
-                    ('unregistered', user_id_to_delete)
+                    "UPDATE users SET role = ?, class_name = ? WHERE user_id = ?",
+                    ('unregistered', None, user_id_to_delete)
                 )
                 await db.commit()
 

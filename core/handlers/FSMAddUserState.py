@@ -1,4 +1,4 @@
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -14,61 +14,126 @@ import time
 router = Router()
 settings = get_settings('.env')
 
+class AddNewUserState(StatesGroup):
+    class_name = State()
+
 # Обработка команды добавления нового пользователя
 @router.message(Command(commands=['addNewUser']))
-async def add_new_user(message: types.Message):
+async def add_new_user(message: types.Message, state: FSMContext):
     user_class = await db_helper.get_user_class(message.from_user.id)
     # Используем существующую проверку прав доступа
     if not db_helper.has_permission(user_class, ADMIN) and not db_helper.has_permission(user_class, OWNER):
         await message.answer("У вас нет прав для выполнения этой команды.")
         return
 
+    markup = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(
+                text='9А',
+                callback_data='class_9a'
+            ),
+            types.InlineKeyboardButton(
+                text='9Б',
+                callback_data='class_9b'
+            ),
+            types.InlineKeyboardButton(
+                text='Отмена',
+                callback_data='cancel_add_user'
+            )
+        ]
+    ])
+
+    await message.answer('Для ученика какого класса вы хотите сгенерировать токен?', reply_markup=markup)
+    await state.set_state(AddNewUserState.class_name)
+
+@router.callback_query(F.data.startswith('class_'), AddNewUserState.class_name)
+async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext):
+    class_name = callback_query.data.split('_')[1]
     # Генерация токена для нового пользователя
-    token = await db_helper.generate_token('user')
+    token = await db_helper.generate_token('user', class_name)
     try:
         async with aiosqlite.connect('bot_data.db') as db:
             await db.execute(
-                "INSERT INTO tokens (token, token_type, expires_at, used) VALUES (?, ?, ?, ?)",
-                (token, 'user', time.time() + 3600, False)  # Токен действителен 1 час
+                "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
+                (token, 'user', class_name, time.time() + 3600, False)
             )
             await db.commit()
-        await message.answer(
+        await callback_query.message.delete()
+        await callback_query.message.answer(
             f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
             parse_mode='HTML'
         )
     except aiosqlite.Error as e:
-        await message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
+        await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
         print(f"Ошибка базы данных при добавлении токена: {e}")
+
+class AddNewAdminState(StatesGroup):
+    class_name = State()
 
 # Генерация токена для повышения до администратора
 @router.message(Command(commands=['makeAdmin']))
-async def make_admin(message: types.Message):
+async def make_admin(message: types.Message, state: FSMContext):
     user_class = await db_helper.get_user_class(message.from_user.id)
     if not db_helper.has_permission(user_class, OWNER):
         await message.answer("У вас нет прав для выполнения этой команды.")
         return
 
+    markup = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(
+                text='9А',
+                callback_data='class_9a'
+            ),
+            types.InlineKeyboardButton(
+                text='9Б',
+                callback_data='class_9b'
+            ),
+            types.InlineKeyboardButton(
+                text='Отмена',
+                callback_data='cancel_add_admin'
+            )
+        ]
+    ])
+
+    await message.answer('Для администратора какого класса вы хотите сгенерировать токен?', reply_markup=markup)
+    await state.set_state(AddNewAdminState.class_name)
+
+@router.callback_query(F.data.startswith('class_'), AddNewAdminState.class_name)
+async def gen_admin_token(callback_query: types.CallbackQuery, state: FSMContext):
+    class_name = callback_query.data.split('_')[1]
     # Генерация токена для повышения до администратора
-    token = await db_helper.generate_token('admin')
+    token = await db_helper.generate_token('admin', class_name)
     try:
         async with aiosqlite.connect('bot_data.db') as db:
             await db.execute(
-                "INSERT INTO tokens (token, token_type, expires_at, used) VALUES (?, ?, ?, ?)",
-                (token, 'admin', time.time() + 3600, False)  # Токен действителен 1 час
+                "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
+                (token, 'admin', class_name, time.time() + 3600, False)  # Токен действителен 1 час
             )
             await db.commit()
-        await message.answer(
+        
+        await callback_query.message.delete()
+        await callback_query.message.answer(
             f"Сгенерирован токен для повышения до администратора: `<code>{token}</code>`. Он действителен 1 час.",
             parse_mode='HTML'
         )
     except aiosqlite.Error as e:
-        await message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
+        await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
         print(f"Ошибка базы данных при добавлении токена: {e}")
+
+@router.callback_query(F.data == 'cancel_add_user', AddNewUserState.class_name)
+async def cancel_add_user(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback_query.message.delete()
+    await callback_query.message.answer('Вы отменили генерацию токена')
+
+@router.callback_query(F.data == 'cancel_add_admin', AddNewAdminState.class_name)
+async def cancel_add_user(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback_query.message.delete()
+    await callback_query.message.answer('Вы отменили генерацию токена')
 
 class AddUserState(StatesGroup):
     waiting_for_fio = State()
-
-
 
 # Обработка команды /reg и регистрация владельца при первом запуске
 @router.message(Command(commands=['registration']))
@@ -88,6 +153,7 @@ async def send_welcome(message: types.Message, state: FSMContext):
                     user_id=user_id,
                     name=None,  # Имя будет запрошено отдельно
                     role=OWNER,  # Назначаем роль владельца
+                    class_name='9b',
                     username=message.from_user.username or None
                 )
                 await db_helper.create_subjects_for_student(user_id=user_id)
@@ -95,14 +161,14 @@ async def send_welcome(message: types.Message, state: FSMContext):
                 await state.set_state(AddUserState.waiting_for_fio)
             elif role[0] != OWNER:
                 # Если роль владельца указана некорректно, обновляем ее
-                await db.execute("UPDATE users SET role = ? WHERE user_id = ?", (OWNER, user_id))
+                await db.execute("UPDATE users SET role = ?, class_name = ? WHERE user_id = ?", (OWNER, '9b', user_id))
                 await db.commit()
                 await message.reply("Ваша роль была обновлена до владельца. Добро пожаловать!")
                 await db_helper.create_subjects_for_student(user_id=user_id)
-                await db_helper.show_main_menu(message)
+                await db_helper.show_choose_class_menu(message)
             else:
                 await message.reply("Добро пожаловать обратно, владелец!")
-                await db_helper.show_main_menu(message)
+                await db_helper.show_choose_class_menu(message)
         else:
             # Проверка для других пользователей
             async with db.execute("SELECT role, user_id FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -140,7 +206,7 @@ async def process_fio(message: types.Message, state: FSMContext):
     fio = message.text
 
     # Проверка уникальности имени
-    if not await db_helper.is_unique_name(fio):
+    if not await db_helper.is_unique_name(fio, user_id):
         await message.reply("Пользователь с таким ФИО уже существует. Пожалуйста, введите уникальное ФИО.")
         return
 
@@ -154,7 +220,7 @@ async def process_fio(message: types.Message, state: FSMContext):
         await db_helper.create_subjects_for_student(user_id=user_id)
 
     await message.reply("Регистрация завершена. Добро пожаловать!")
-    await db_helper.show_main_menu(message)
+    await db_helper.show_choose_class_menu(message)
     await state.clear()
 
 # Обработка токена для регистрации или назначения роли
@@ -164,14 +230,14 @@ async def process_token(message: types.Message, state: FSMContext):
     token = message.text.split(" ")[1]
 
     async with aiosqlite.connect('bot_data.db') as db:
-        async with db.execute("SELECT token_type, expires_at, used FROM tokens WHERE token = ?", (token,)) as cursor:
+        async with db.execute("SELECT token_type, token_class, expires_at, used FROM tokens WHERE token = ?", (token,)) as cursor:
             token_data = await cursor.fetchone()
         
         if not token_data:
             await message.reply("Неверный или несуществующий токен.")
             return
 
-        token_type, expires_at, used = token_data
+        token_type, token_class, expires_at, used = token_data
 
         if used:
             await message.reply("Этот токен уже был использован.")
@@ -183,12 +249,12 @@ async def process_token(message: types.Message, state: FSMContext):
 
         # Назначаем роль на основе типа токена
         role = "admin" if token_type == "admin" else "user"
-
+        class_name = token_class
 
         await message.reply(f"Введите ваше ФИО (Фамилия Имя Отчество), чтобы завершить регистрацию как {role}.")
         await state.set_state(AddUserState.waiting_for_fio)
 
-        await db.execute("UPDATE users SET role = ? WHERE user_id = ?", (role, user_id))
+        await db.execute("UPDATE users SET role = ?, class_name = ? WHERE user_id = ?", (role, class_name, user_id))
 
         # Помечаем токен как использованный
         await db.execute("UPDATE tokens SET used = 1 WHERE token = ?", (token,))
@@ -316,8 +382,8 @@ async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMCon
 
             if is_admin:
                 await db.execute(
-                    "UPDATE users SET type = ? WHERE user_id = ?",
-                    ("teacher", user_id_to_change)
+                    "UPDATE users SET type = ?, class_name = ? WHERE user_id = ?",
+                    ("teacher", "general", user_id_to_change)
                 )
                 await db.commit()
 
