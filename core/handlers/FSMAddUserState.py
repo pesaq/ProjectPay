@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
+import string
+
 from core.settings import get_settings
 
 from database.db_helper import db_helper
@@ -71,9 +73,10 @@ async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext)
                 await db.commit()
             await callback_query.message.delete()
             await callback_query.message.answer(
-                f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
+                f"Сгенерирован токен для нового пользователя:\n`<code>/token {token}</code>`. Он действителен 1 час.",
                 parse_mode='HTML'
             )
+            await db_helper.show_choose_class_menu(callback_query.message)
         except aiosqlite.Error as e:
             await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
             print(f"Ошибка базы данных при добавлении токена: {e}")
@@ -90,14 +93,16 @@ async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext)
                     await db.commit()
                 await callback_query.message.delete()
                 await callback_query.message.answer(
-                    f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
+                    f"Сгенерирован токен для нового пользователя:\n`<code>/token {token}</code>`. Он действителен 1 час.",
                     parse_mode='HTML'
                 )
+                await db_helper.show_choose_class_menu(callback_query.message)
             except aiosqlite.Error as e:
                 await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
                 print(f"Ошибка базы данных при добавлении токена: {e}")
         else:
             await callback_query.message.answer('Вы не можете сгенерировать токен для пользователя чужого класса.')
+            await db_helper.show_choose_class_menu(callback_query.message)
         
 
 class AddNewAdminState(StatesGroup):
@@ -146,9 +151,10 @@ async def gen_admin_token(callback_query: types.CallbackQuery, state: FSMContext
         
         await callback_query.message.delete()
         await callback_query.message.answer(
-            f"Сгенерирован токен для повышения до администратора: `<code>{token}</code>`. Он действителен 1 час.",
+            f"Сгенерирован токен для повышения до администратора:\n`<code>/token {token}</code>`. Он действителен 1 час.",
             parse_mode='HTML'
         )
+        await db_helper.show_choose_class_menu(callback_query.message)
     except aiosqlite.Error as e:
         await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
         print(f"Ошибка базы данных при добавлении токена: {e}")
@@ -245,6 +251,17 @@ async def process_fio(message: types.Message, state: FSMContext):
         await message.reply("Пользователь с таким ФИО уже существует. Пожалуйста, введите уникальное ФИО.")
         return
 
+    if len(fio) < 10 or len(fio) > 50:
+        await message.reply('ФИО должно содержать как минимум 10, и не более 50 символов')
+        return
+
+    if any(char in string.digits for char in fio):
+        await message.reply('ФИО не должно содержать числовых значений')
+        return
+    
+    if any(char in string.punctuation for char in fio):
+        await message.reply('ФИО не должно содержать знаков пунктуации')
+
     async with aiosqlite.connect('bot_data.db') as db:
         role = await db_helper.get_user_role(user_id=user_id)
 
@@ -258,7 +275,6 @@ async def process_fio(message: types.Message, state: FSMContext):
     await db_helper.show_choose_class_menu(message)
     await state.clear()
 
-# Обработка токена для регистрации или назначения роли
 @router.message(lambda message: message.text.startswith("/token "))
 async def process_token(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -289,7 +305,17 @@ async def process_token(message: types.Message, state: FSMContext):
         await message.reply(f"Введите ваше ФИО (Фамилия Имя Отчество), чтобы завершить регистрацию как {role}.")
         await state.set_state(AddUserState.waiting_for_fio)
 
-        await db.execute("UPDATE users SET role = ?, class_name = ? WHERE user_id = ?", (role, class_name, user_id))
+        # Проверяем, существует ли пользователь в базе данных
+        async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as user_cursor:
+            user_data = await user_cursor.fetchone()
+
+        if user_data is None:
+            # Добавляем нового пользователя
+            await db.execute("INSERT INTO users (user_id, role, class_name) VALUES (?, ?, ?)", (user_id, role, class_name))
+
+        else:
+            # Обновляем уже существующего пользователя
+            await db.execute("UPDATE users SET role = ?, class_name = ? WHERE user_id = ?", (role, class_name, user_id))
 
         # Помечаем токен как использованный
         await db.execute("UPDATE tokens SET used = 1 WHERE token = ?", (token,))
@@ -434,6 +460,7 @@ async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMCon
                     f"Тип администратора {user_name} (Username: @{username}) был иземнен до teacher.",
                     reply_markup=None
                 )
+                await db_helper.show_choose_class_menu(callback_query.message)
 
         await state.clear()
     except aiosqlite.Error as e:
@@ -584,6 +611,8 @@ async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMCon
                     f"Тип администратора {user_name} (Username: @{username}) был иземнен до student.",
                     reply_markup=None
                 )
+                await db_helper.show_choose_class_menu(callback_query.message)
+
 
         await state.clear()
     except aiosqlite.Error as e:

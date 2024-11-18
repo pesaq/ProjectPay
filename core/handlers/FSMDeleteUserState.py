@@ -234,6 +234,7 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
                     f"Администратор {user_name} (Username: @{username}) был понижен до пользователя.",
                     reply_markup=None
                 )
+                await db_helper.show_choose_class_menu(callback_query.message)
             else:
                 # Понижаем пользователя до незарегистрированного
                 await db.execute(
@@ -253,6 +254,7 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
                 await callback_query.message.edit_text(
                     f"Пользователь {user_name} (Username: @{username}) был удален.", reply_markup=None
                 )
+                await db_helper.show_choose_class_menu(callback_query.message)
 
         await state.clear()
     except aiosqlite.Error as e:
@@ -321,6 +323,12 @@ async def select_clear(message: types.Message, state: FSMContext):
             types.InlineKeyboardButton(
                 text='Все заметки (Дневник)',
                 callback_data='clear_diary'
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text='Отмена',
+                callback_data='cancel_clear'
             )
         ]
     ])
@@ -400,4 +408,18 @@ async def confirm_delete_data(callback_query: types.CallbackQuery, state: FSMCon
             await callback_query.message.edit_text('Все Заметки (Дневник) были удалены', reply_markup=None)
         await db.commit()
     
+    await db_helper.show_choose_class_menu(callback_query.message)
+    
+    await state.clear()
+
+@router.callback_query(ClearTables.confirm_clear, F.data == 'cancel_clear')
+async def cancel_delete_data(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.message.edit_text('Вы отменили действие')
+    await db_helper.show_choose_class_menu(callback_query.message)
+    await state.clear()
+
+@router.callback_query(ClearTables.choosing_clear, F.data == 'cancel_clear')
+async def cancel_delete_data(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.message.edit_text('Вы отменили действие')
+    await db_helper.show_choose_class_menu(callback_query.message)
     await state.clear()
