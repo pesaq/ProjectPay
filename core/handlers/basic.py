@@ -45,7 +45,7 @@ async def send_help(message: types.Message):
                              "/deleteAdmin - удалить администратора\n"
                              "/addtype - изменить тип администратора на \"teacher\"\n"
                              "/deltype - изменить тип администратора на \"student\"\n"
-                             "(/)clear_all - очистить базу данных (ручной ввод)\n"
+                             "(/)clear_data - очистить базу данных (ручной ввод)\n"
                              "/help - справка")
     elif user_class == 'admin':  # Проверка для администратора
         await message.answer("Доступные команды для администратора:\n"

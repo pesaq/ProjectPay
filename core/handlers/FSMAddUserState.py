@@ -48,24 +48,57 @@ async def add_new_user(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith('class_'), AddNewUserState.class_name)
 async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
     class_name = callback_query.data.split('_')[1]
-    # Генерация токена для нового пользователя
-    token = await db_helper.generate_token('user', class_name)
-    try:
-        async with aiosqlite.connect('bot_data.db') as db:
-            await db.execute(
-                "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
-                (token, 'user', class_name, time.time() + 3600, False)
+    user_class = await db_helper.get_user_class(user_id)
+    user_class_name = await db_helper.get_user_class_name(user_id)
+    async with aiosqlite.connect('bot_data.db') as db:
+            async with db.execute("SELECT type FROM users WHERE user_id=?", (user_id,)) as cursor:
+                user_type = await cursor.fetchone()
+
+                if user_type:
+                    user_type = user_type[0]
+    
+    if (user_type == "teacher" and db_helper.has_permission(user_class, ADMIN)) or db_helper.has_permission(user_class, OWNER):
+        # Генерация токена для нового пользователя
+        token = await db_helper.generate_token('user', class_name)
+        try:
+            async with aiosqlite.connect('bot_data.db') as db:
+                await db.execute(
+                    "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
+                    (token, 'user', class_name, time.time() + 3600, False)
+                )
+                await db.commit()
+            await callback_query.message.delete()
+            await callback_query.message.answer(
+                f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
+                parse_mode='HTML'
             )
-            await db.commit()
-        await callback_query.message.delete()
-        await callback_query.message.answer(
-            f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
-            parse_mode='HTML'
-        )
-    except aiosqlite.Error as e:
-        await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
-        print(f"Ошибка базы данных при добавлении токена: {e}")
+        except aiosqlite.Error as e:
+            await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
+            print(f"Ошибка базы данных при добавлении токена: {e}")
+    else:
+        if user_class_name == class_name:
+            # Генерация токена для нового пользователя
+            token = await db_helper.generate_token('user', class_name)
+            try:
+                async with aiosqlite.connect('bot_data.db') as db:
+                    await db.execute(
+                        "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
+                        (token, 'user', class_name, time.time() + 3600, False)
+                    )
+                    await db.commit()
+                await callback_query.message.delete()
+                await callback_query.message.answer(
+                    f"Сгенерирован токен для нового пользователя: `<code>{token}</code>`. Он действителен 1 час.",
+                    parse_mode='HTML'
+                )
+            except aiosqlite.Error as e:
+                await callback_query.message.answer("Произошла ошибка при генерации токена. Пожалуйста, попробуйте позже.")
+                print(f"Ошибка базы данных при добавлении токена: {e}")
+        else:
+            await callback_query.message.answer('Вы не можете сгенерировать токен для пользователя чужого класса.')
+        
 
 class AddNewAdminState(StatesGroup):
     class_name = State()
@@ -124,12 +157,14 @@ async def gen_admin_token(callback_query: types.CallbackQuery, state: FSMContext
 async def cancel_add_user(callback_query: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback_query.message.delete()
+    await db_helper.show_choose_class_menu(callback_query.message)
     await callback_query.message.answer('Вы отменили генерацию токена')
 
 @router.callback_query(F.data == 'cancel_add_admin', AddNewAdminState.class_name)
 async def cancel_add_user(callback_query: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback_query.message.delete()
+    await db_helper.show_choose_class_menu(callback_query.message)
     await callback_query.message.answer('Вы отменили генерацию токена')
 
 class AddUserState(StatesGroup):

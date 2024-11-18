@@ -276,7 +276,7 @@ async def process_work_entry(message: types.Message, state: FSMContext):
         ], resize_keyboard=True)
 
         await message.answer("Возвращены в подменю 'Домашние работы'.", reply_markup=markup)
-        await state.set_state(Work9BState.waiting_for_info_action)
+        await state.set_state(Work9BState.waiting_for_work_action)
         return
 
     user_id = message.from_user.id

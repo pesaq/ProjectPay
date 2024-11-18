@@ -159,7 +159,7 @@ class DataBaseHelper:
                 types.KeyboardButton(text='Дневник'),
                 types.KeyboardButton(text='Среднее арифметическое')
             ]
-        ])
+        ], resize_keyboard=True)
         await message.answer("Выберите класс для взаимодействия:", reply_markup=markup)
 
     async def show_9a_main_menu(self, message: types.Message, state: FSMContext):

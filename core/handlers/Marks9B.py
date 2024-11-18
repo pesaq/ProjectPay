@@ -51,7 +51,7 @@ async def student_grades_handler(message: types.Message, state: FSMContext):
                             text='Назад'
                         )
                     ]
-                ])
+                ], resize_keyboard=True)
             elif user_type == "student":
                 markup = types.ReplyKeyboardMarkup(keyboard=[
                     [
@@ -62,7 +62,7 @@ async def student_grades_handler(message: types.Message, state: FSMContext):
                             text='Назад'
                         )
                     ]
-                ])
+                ], resize_keyboard=True)
         
         await message.answer('Выберите действие:', reply_markup=markup)
         await state.set_state(Marks9BState.marks_action)
@@ -379,14 +379,17 @@ async def student_grades_handler(message: types.Message, state: FSMContext):
             return
  
         # Формируем вывод для каждого предмета и его оценок
+        output_messages = []
         for subject, grades_text in subjects:
             # Извлекаем все числовые оценки из строки для расчета среднего
             grades = [int(num) for num in re.findall(r'\d+', grades_text)]
             subject_mean = await calculate_mean(grades)
- 
-            # Отправляем оценки и средний балл в отдельных сообщениях
-            await message.answer(f"`{subject}: {grades_text}`", parse_mode=ParseMode.MARKDOWN)
-            await message.answer(f"<b>Средний балл по предмету {subject}: {subject_mean:.2f}</b>", parse_mode=ParseMode.HTML)
+
+            # Формируем сообщение
+            output_messages.append(f"<b>{subject}</b>: {grades_text}\nСредний балл: <b>{subject_mean:.2f}</b>\n")
+
+        # Отправляем все сообщения в одном
+        await message.answer("\n".join(output_messages), parse_mode=ParseMode.HTML)
  
         # Сообщение о возвращении в главное меню
         await message.answer("Возвращение в главное меню...")
