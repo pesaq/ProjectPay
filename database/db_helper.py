@@ -22,7 +22,7 @@ class DataBaseHelper:
 
     # Асинхронная функция для инициализации базы данных и создания таблиц
     async def initialize_database(self):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
 
             # Создание таблицы для хранения информации
             await db.execute('''
@@ -108,7 +108,7 @@ class DataBaseHelper:
 
     # Асинхронная функция для добавления пользователя в базу данных
     async def add_user(self, user_id, name, role, username, user_type, class_name):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             await db.execute('''
                 INSERT OR REPLACE INTO users (user_id, name, role, username, type, class_name)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -117,14 +117,14 @@ class DataBaseHelper:
 
     # Асинхронная функция для получения роли пользователя
     async def get_user_role(self, user_id):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)) as cursor:
                 result = await cursor.fetchone()
                 return result[0] if result else None
 
     # Асинхронная функция для получения полного имени пользователя
     async def get_user_full_name(self, user_id):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT name FROM users WHERE user_id = ?", (user_id,)) as cursor:
                 result = await cursor.fetchone()
                 return result[0] if result else None
@@ -137,14 +137,14 @@ class DataBaseHelper:
         return role if role else None
     
     async def get_user_class_name(self, user_id):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT class_name FROM users WHERE user_id = ?", (user_id,)) as cursor:
                 result = await cursor.fetchone()
                 return result[0] if result else None
 
     # Функция для добавления нового пользователя в базу
     async def add_user(self, user_id, name, role, username, user_type="student", class_name=None):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             await db.execute('''
                 INSERT INTO users (user_id, name, role, username, type, class_name)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -191,7 +191,7 @@ class DataBaseHelper:
         await state.set_state(Class9BState.action)
 
     async def is_unique_name(self, name, user_id=None):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             query = "SELECT user_id FROM users WHERE name = ?"
             
             if user_id is not None:
@@ -219,19 +219,19 @@ class DataBaseHelper:
     # Функция для удаления работы старше 8 дней
     async def delete_old_works(self):
         threshold = time.time() - 8 * 24 * 60 * 60
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             await db.execute("DELETE FROM works WHERE timestamp < ?", (threshold,))
             await db.commit()
     
     # Функция для удаления информации старше 8 дней
     async def delete_old_information(self):
         threshold = time.time() - 8 * 24 * 60 * 60
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             await db.execute("DELETE FROM information WHERE timestamp < ?", (threshold,))
             await db.commit()
     
     async def create_subjects_for_student(self, user_id):
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             # Проверка наличия записей по user_id
             async with db.execute('SELECT COUNT(*) FROM marks WHERE user_id = ?', (user_id,)) as cursor:
                 count = await cursor.fetchone()

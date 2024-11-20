@@ -86,7 +86,7 @@ async def process_homework_action(message: types.Message, state: FSMContext):
         await state.set_state(HomeworkState.waiting_for_homework_entry)
     elif action == "Узнать д/з":
         # Получаем домашнее задание из базы данных
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT text, sender, username, timestamp FROM homework WHERE user_id = ? AND subject = ?", (user_id, subject['subject'])) as cursor:
                 homework = await cursor.fetchone()
         if homework:
@@ -113,7 +113,7 @@ async def process_homework_entry(message: types.Message, state: FSMContext):
 
     # Сохраняем домашнее задание в базе данных
     timestamp = time.time()
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         await db.execute(
             "INSERT OR REPLACE INTO homework (user_id, subject, text, sender, username, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
             (user_id, subject['subject'], homework_text, await db_helper.get_user_full_name(user_id), f"@{message.from_user.username}", timestamp)

@@ -122,7 +122,7 @@ async def process_work_entry(message: types.Message, state: FSMContext):
         return
 
     user_id = message.from_user.id
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         try:
             await db.execute(
                 "INSERT INTO works (work, sender, class_name, timestamp) VALUES (?, ?, ?, ?)",
@@ -144,7 +144,7 @@ async def view_works(message: types.Message, state: FSMContext):
         await message.answer('Вы не состоите в 9А классе')
         return
     now = time.time()
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT work, sender, timestamp FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9a')) as cursor:
             recent_works = await cursor.fetchall()
 
@@ -280,7 +280,7 @@ async def process_work_entry(message: types.Message, state: FSMContext):
         return
 
     user_id = message.from_user.id
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         try:
             await db.execute(
                 "INSERT INTO works (work, sender, class_name, timestamp) VALUES (?, ?, ?, ?)",
@@ -302,7 +302,7 @@ async def view_works(message: types.Message, state: FSMContext):
         await message.answer('Вы не состоите в 9Б классе')
         return
     now = time.time()
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT work, sender, timestamp FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9b')) as cursor:
             recent_works = await cursor.fetchall()
 

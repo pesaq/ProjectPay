@@ -27,7 +27,7 @@ async def delete_user_command(message: types.Message, state: FSMContext):
     user_class = await db_helper.get_user_class(user_id)
     user_class_name = await db_helper.get_user_class_name(user_id)
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT type FROM users WHERE user_id=?", (user_id,)) as cursor:
                 user_type = await cursor.fetchone()
 
@@ -39,7 +39,7 @@ async def delete_user_command(message: types.Message, state: FSMContext):
         return
 
     try:
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             if user_type == 'student':
                 if user_class_name == '9a':
                     async with db.execute(
@@ -108,7 +108,7 @@ async def delete_admin_command(message: types.Message, state: FSMContext):
         return
 
     try:
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE role = ? AND user_id != ? AND role != ?",
                 (ADMIN, settings.bots.owner_chat_id, OWNER)
@@ -171,7 +171,7 @@ async def process_delete_user(callback_query: types.CallbackQuery, state: FSMCon
         ]
     )
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
                 (user_id_to_delete,)
@@ -199,7 +199,7 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
         user_id_to_delete = data['user_id_to_delete']
         is_admin = data.get('is_admin', False)
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             # Получаем роль пользователя перед удалением
             async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_delete,)) as cursor:
                 role_result = await cursor.fetchone()
@@ -377,7 +377,7 @@ async def confirm_delete_data(callback_query: types.CallbackQuery, state: FSMCon
     data = await state.get_data()
     what_clear = data['what_clear']
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         if what_clear == 'marks':
             await db.execute("UPDATE marks SET grades = ''")
             await callback_query.message.edit_text('Все оценки были удалены', reply_markup=None)

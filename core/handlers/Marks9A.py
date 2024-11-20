@@ -35,7 +35,7 @@ async def student_grades_handler(message: types.Message, state: FSMContext):
     if user_class is None or user_class == 'unregistered':
         await message.answer("У вас нет прав для выполнения этой команды. Пожалуйста, зарегистрируйтесь снова с помощью токена.")
         return
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT type FROM users WHERE user_id=?", (message.from_user.id,)) as cursor:
             user_type = await cursor.fetchone()
             if user_type:
@@ -92,7 +92,7 @@ async def edit_user_mark_command(message: types.Message, state: FSMContext):
     if user_class_name != '9a' and user_class_name != 'general':
         await message.answer('Вы не состоите в 9А классе')
         return    
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT type FROM users WHERE user_id=?", (message.from_user.id,)) as cursor:
             user_type = await cursor.fetchone()
     
@@ -101,7 +101,7 @@ async def edit_user_mark_command(message: types.Message, state: FSMContext):
             # Проверяем права доступа пользователя
             if user_type == "teacher":
                 try:
-                    async with aiosqlite.connect('bot_data.db') as db:
+                    async with aiosqlite.connect('bot_data/bot_data.db') as db:
                         async with db.execute(
                             "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role IN (?, ?, ?) AND class_name = ?",
                             ("student", USER, ADMIN, OWNER, '9a')
@@ -158,7 +158,7 @@ async def process_edit_mark_user(callback_query: types.CallbackQuery, state: FSM
         keyboard_buttons = [[types.KeyboardButton(text=subject) for subject in subjects[i:i + 2]] for i in range(0, len(subjects), 2)]
         markup = types.ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
                 (user_id_to_edit,)
@@ -250,7 +250,7 @@ async def confirm_delete_user(callback_query: types.CallbackQuery, state: FSMCon
         await callback_query.message.answer('Выберите оценку, которую вы хотите поставить:', reply_markup=keyboard)
         await state.set_state(EditMarks9AState.choosing_mark)
     elif selected_action == 'del':
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT grades FROM marks WHERE subject_name = ? AND user_id = ?", (subject_to_edit, user_id_to_edit)) as cursor:
                 marks_data = await cursor.fetchone()
                 marks_data = marks_data[0]
@@ -286,7 +286,7 @@ async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = data['user_id_to_edit']
     subject_name = data['subject_to_edit']
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         cursor = await db.execute("SELECT grades FROM marks WHERE subject_name = ? AND user_id = ?", (subject_name, user_id))
         current_grades = await cursor.fetchone()
         
@@ -309,7 +309,7 @@ async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
     user_id_to_edit = data['user_id_to_edit']
     subject_to_edit = data['subject_to_edit']
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT grades FROM marks WHERE user_id = ? AND subject_name = ?", (user_id_to_edit, subject_to_edit)) as cursor:
             row = await cursor.fetchone()
 
@@ -328,7 +328,7 @@ async def set_mark(callback_query: types.CallbackQuery, state: FSMContext):
             new_grades_str = ','.join(new_grades)
             await db.execute("UPDATE marks SET grades = ? WHERE user_id = ? AND subject_name = ?", (new_grades_str, user_id_to_edit, subject_to_edit))
             await db.commit()
-            async with aiosqlite.connect('bot_data.db') as db:
+            async with aiosqlite.connect('bot_data/bot_data.db') as db:
                 async with db.execute("SELECT grades FROM marks WHERE subject_name = ? AND user_id = ?", (subject_to_edit, user_id_to_edit)) as cursor:
                     marks_data = await cursor.fetchone()
                     marks_data = marks_data[0]
@@ -364,7 +364,7 @@ async def student_grades_handler(message: types.Message, state: FSMContext):
     if user_class_name != '9a' and user_class_name != 'general':
         await message.answer('Вы не состоите в 9А классе')
         return
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         cursor = await db.cursor()
  
         # Получаем список предметов и оценок для данного пользователя

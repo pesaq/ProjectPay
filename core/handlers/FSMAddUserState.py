@@ -54,7 +54,7 @@ async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext)
     class_name = callback_query.data.split('_')[1]
     user_class = await db_helper.get_user_class(user_id)
     user_class_name = await db_helper.get_user_class_name(user_id)
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute("SELECT type FROM users WHERE user_id=?", (user_id,)) as cursor:
                 user_type = await cursor.fetchone()
 
@@ -65,7 +65,7 @@ async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext)
         # Генерация токена для нового пользователя
         token = await db_helper.generate_token('user', class_name)
         try:
-            async with aiosqlite.connect('bot_data.db') as db:
+            async with aiosqlite.connect('bot_data/bot_data.db') as db:
                 await db.execute(
                     "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
                     (token, 'user', class_name, time.time() + 3600, False)
@@ -85,7 +85,7 @@ async def gen_user_token(callback_query: types.CallbackQuery, state: FSMContext)
             # Генерация токена для нового пользователя
             token = await db_helper.generate_token('user', class_name)
             try:
-                async with aiosqlite.connect('bot_data.db') as db:
+                async with aiosqlite.connect('bot_data/bot_data.db') as db:
                     await db.execute(
                         "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
                         (token, 'user', class_name, time.time() + 3600, False)
@@ -142,7 +142,7 @@ async def gen_admin_token(callback_query: types.CallbackQuery, state: FSMContext
     # Генерация токена для повышения до администратора
     token = await db_helper.generate_token('admin', class_name)
     try:
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             await db.execute(
                 "INSERT INTO tokens (token, token_type, token_class, expires_at, used) VALUES (?, ?, ?, ?, ?)",
                 (token, 'admin', class_name, time.time() + 3600, False)  # Токен действителен 1 час
@@ -181,7 +181,7 @@ class AddUserState(StatesGroup):
 async def send_welcome(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         # Проверка для владельца
         if user_id == settings.bots.owner_chat_id:
             # Проверяем, зарегистрирован ли владелец в базе данных
@@ -265,7 +265,7 @@ async def process_fio(message: types.Message, state: FSMContext):
     role = data.get("role")
     class_name = data.get("class_name")
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         # Проверяем, существует ли пользователь в базе данных
         async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as user_cursor:
             user_data = await user_cursor.fetchone()
@@ -290,7 +290,7 @@ async def process_token(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     token = message.text.split(" ")[1]
 
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT token_type, token_class, expires_at, used FROM tokens WHERE token = ?", (token,)) as cursor:
             token_data = await cursor.fetchone()
         
@@ -337,7 +337,7 @@ async def addtype_user(message: types.Message, state: FSMContext):
         return
 
     try:
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role = ? AND user_id != ? AND role != ?",
                 ("student", ADMIN, settings.bots.owner_chat_id, OWNER)
@@ -399,7 +399,7 @@ async def process_change_type(callback_query: types.CallbackQuery, state: FSMCon
         ]
     )
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
                 (user_id_to_delete,)
@@ -427,7 +427,7 @@ async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMCon
         user_id_to_change = data['user_id_to_delete']
         is_admin = data.get('is_admin', False)
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             # Получаем роль пользователя перед изменением
             async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_change,)) as cursor:
                 role_result = await cursor.fetchone()
@@ -488,7 +488,7 @@ async def deltype_user(message: types.Message, state: FSMContext):
         return
 
     try:
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT user_id, name, COALESCE(username, 'отсутствует') as username FROM users WHERE type = ? AND role = ? AND user_id != ? AND role != ?",
                 ("teacher", ADMIN, settings.bots.owner_chat_id, OWNER)
@@ -550,7 +550,7 @@ async def process_change_type(callback_query: types.CallbackQuery, state: FSMCon
         ]
     )
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             async with db.execute(
                 "SELECT name, COALESCE(username, 'отсутствует') FROM users WHERE user_id = ?",
                 (user_id_to_delete,)
@@ -578,7 +578,7 @@ async def confirm_change_type(callback_query: types.CallbackQuery, state: FSMCon
         user_id_to_change = data['user_id_to_delete']
         is_admin = data.get('is_admin', False)
 
-        async with aiosqlite.connect('bot_data.db') as db:
+        async with aiosqlite.connect('bot_data/bot_data.db') as db:
             # Получаем роль пользователя перед изменением
             async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id_to_change,)) as cursor:
                 role_result = await cursor.fetchone()

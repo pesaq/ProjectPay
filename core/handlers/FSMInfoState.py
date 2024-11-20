@@ -123,7 +123,7 @@ async def process_info_entry(message: types.Message, state: FSMContext):
         return
 
     user_id = message.from_user.id
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         await db.execute(
             "INSERT INTO information (info, sender, timestamp, class_name) VALUES (?, ?, ?, ?)",
             (message.text, await db_helper.get_user_full_name(user_id), time.time(), '9a')
@@ -141,7 +141,7 @@ async def view_info(message: types.Message, state: FSMContext):
         await message.answer('Вы не состоите в 9А классе')
         return
     now = time.time()
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT info, sender, timestamp FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9a')) as cursor:
             recent_info = await cursor.fetchall()
     
@@ -277,7 +277,7 @@ async def process_info_entry(message: types.Message, state: FSMContext):
         return
 
     user_id = message.from_user.id
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         await db.execute(
             "INSERT INTO information (info, sender, timestamp, class_name) VALUES (?, ?, ?, ?)",
             (message.text, await db_helper.get_user_full_name(user_id), time.time(), '9b')
@@ -295,7 +295,7 @@ async def view_info(message: types.Message, state: FSMContext):
         await message.answer('Вы не состоите в 9Б классе')
         return
     now = time.time()
-    async with aiosqlite.connect('bot_data.db') as db:
+    async with aiosqlite.connect('bot_data/bot_data.db') as db:
         async with db.execute("SELECT info, sender, timestamp FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9b')) as cursor:
             recent_info = await cursor.fetchall()
     
