@@ -19,7 +19,7 @@ async def get_start(message: Message):
     role = await db_helper.get_user_role(user_id=user_id)
 
     if role is None or role == "unregistered":
-        await message.answer('Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен.\nДля ввода токена используйте команду /token "здесь без скобок ваш токен"\nЕсли у вас его нет, обратитесь к владельцу или администратору для его получения.\nВладелец бота: @Kibershkolnik')
+        await message.answer('Здравствуйте! Для доступа к некоторым возможностям бота, пожалуйста, введите токен.\nДля ввода токена используйте команду\n/token "здесь без скобок ваш токен"\n\nЕсли у вас его нет, обратитесь к владельцу или администратору для его получения.\n\nВладелец бота: @Kibershkolnik')
     else:
         await db_helper.show_choose_class_menu(message)
 

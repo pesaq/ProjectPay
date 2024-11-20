@@ -240,13 +240,11 @@ async def send_welcome(message: types.Message, state: FSMContext):
                     "Если у вас его нет, обратитесь к владельцу или администратору."
                 )
 
-# Завершение регистрации после ввода ФИО
 @router.message(AddUserState.waiting_for_fio)
 async def process_fio(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     fio = message.text
 
-    # Проверка уникальности имени
     if not await db_helper.is_unique_name(fio, user_id):
         await message.reply("Пользователь с таким ФИО уже существует. Пожалуйста, введите уникальное ФИО.")
         return
@@ -261,15 +259,27 @@ async def process_fio(message: types.Message, state: FSMContext):
     
     if any(char in string.punctuation for char in fio):
         await message.reply('ФИО не должно содержать знаков пунктуации')
+        return
+
+    data = await state.get_data()
+    role = data.get("role")
+    class_name = data.get("class_name")
 
     async with aiosqlite.connect('bot_data.db') as db:
-        role = await db_helper.get_user_role(user_id=user_id)
-
-        # Завершаем регистрацию для владельца или других пользователей
-        await db.execute("UPDATE users SET name = ?, role = ?, type = ? WHERE user_id = ?", (fio, role, "student", user_id))
-        await db.commit()
-
-        await db_helper.create_subjects_for_student(user_id=user_id)
+        # Проверяем, существует ли пользователь в базе данных
+        async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as user_cursor:
+            user_data = await user_cursor.fetchone()
+        if user_data is None:
+            await db.execute("INSERT INTO users (user_id, name, role, class_name, type) VALUES (?, ?, ?, ?, ?)", 
+                             (user_id, fio, role, class_name, "student"))
+            await db.commit()
+            await db_helper.create_subjects_for_student(user_id=user_id)   
+        else:
+            if 'owner' in user_data:
+                await db.execute("UPDATE users SET name = ?, role = ?, class_name = ? WHERE user_id = ?", (fio, 'owner', '9b', user_id))
+            else:       
+                await db.execute("UPDATE users SET name = ?, role = ?, class_name = ? WHERE user_id = ?", (fio, role, class_name, user_id))
+            await db.commit()
 
     await message.reply("Регистрация завершена. Добро пожаловать!")
     await db_helper.show_choose_class_menu(message)
@@ -302,20 +312,11 @@ async def process_token(message: types.Message, state: FSMContext):
         role = "admin" if token_type == "admin" else "user"
         class_name = token_class
 
+        # Сохраняем информацию о роли и классе в состоянии
+        await state.update_data(role=role, class_name=class_name)
+
         await message.reply(f"Введите ваше ФИО (Фамилия Имя Отчество), чтобы завершить регистрацию как {role}.")
         await state.set_state(AddUserState.waiting_for_fio)
-
-        # Проверяем, существует ли пользователь в базе данных
-        async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as user_cursor:
-            user_data = await user_cursor.fetchone()
-
-        if user_data is None:
-            # Добавляем нового пользователя
-            await db.execute("INSERT INTO users (user_id, role, class_name) VALUES (?, ?, ?)", (user_id, role, class_name))
-
-        else:
-            # Обновляем уже существующего пользователя
-            await db.execute("UPDATE users SET role = ?, class_name = ? WHERE user_id = ?", (role, class_name, user_id))
 
         # Помечаем токен как использованный
         await db.execute("UPDATE tokens SET used = 1 WHERE token = ?", (token,))
