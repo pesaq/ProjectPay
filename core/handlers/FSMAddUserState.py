@@ -353,8 +353,9 @@ async def addtype_user(message: types.Message, state: FSMContext):
                 types.InlineKeyboardButton(
                     text=admin[1],
                     callback_data=f"change_type_{admin[0]}"
-                ) for admin in available_admins
-            ],
+                )
+            ] for admin in available_admins
+        ] + [
             [
                 types.InlineKeyboardButton(
                     text="Отмена",
@@ -498,14 +499,15 @@ async def deltype_user(message: types.Message, state: FSMContext):
         if not available_admins:
             await message.reply("Нет доступных администраторов.")
             return
-
+        
         buttons = [
             [
                 types.InlineKeyboardButton(
                     text=admin[1],
                     callback_data=f"change_type_{admin[0]}"
-                ) for admin in available_admins
-            ],
+                )
+            ] for admin in available_admins
+        ] + [
             [
                 types.InlineKeyboardButton(
                     text="Отмена",

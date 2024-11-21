@@ -72,14 +72,15 @@ async def delete_user_command(message: types.Message, state: FSMContext):
             if not available_users:
                     await message.reply("Нет доступных пользователей для удаления.")
                     return
-
+        
         buttons = [
             [
                 types.InlineKeyboardButton(
                     text=user[1],
                     callback_data=f"delete_user_{user[0]}"
-                ) for user in available_users
-            ],
+                )
+            ] for user in available_users
+        ] + [
             [
                 types.InlineKeyboardButton(
                     text="Отмена",
@@ -124,8 +125,9 @@ async def delete_admin_command(message: types.Message, state: FSMContext):
                 types.InlineKeyboardButton(
                     text=admin[1],
                     callback_data=f"delete_admin_{admin[0]}"
-                ) for admin in available_admins
-            ],
+                )
+            ] for admin in available_admins
+        ] + [
             [
                 types.InlineKeyboardButton(
                     text="Отмена",
@@ -133,7 +135,7 @@ async def delete_admin_command(message: types.Message, state: FSMContext):
                 )
             ]
         ]
-
+        
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
         await state.set_state(DeleteUserState.choosing_user)
