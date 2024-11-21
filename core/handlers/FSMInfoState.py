@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
+import uuid
+
 from core.settings import get_settings
 
 from database.db_helper import db_helper
@@ -90,7 +92,20 @@ async def add_info(message: types.Message, state: FSMContext):
 
 @router.message(Info9AState.waiting_for_info_entry)
 async def process_info_entry(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
+    random_filename = f'photo_{uuid.uuid4()}.jpg'
+    info_text = ""
+
+    if message.photo:
+        await message.bot.download(file=message.photo[-1].file_id, destination=f'images_data/{random_filename}')
+        if message.caption:
+            info_text = message.caption
+        else:
+            info_text = "(без описания)"
+
+    elif message.text:
+        info_text = message.text
+
+    if message.text and message.text.lower() == "отмена":
         # Возвращаем пользователя в подменю 'Информация'
         user_class = await db_helper.get_user_class(message.from_user.id)
         if user_class in [ADMIN, OWNER]:
@@ -124,12 +139,18 @@ async def process_info_entry(message: types.Message, state: FSMContext):
 
     user_id = message.from_user.id
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        await db.execute(
-            "INSERT INTO information (info, sender, timestamp, class_name) VALUES (?, ?, ?, ?)",
-            (message.text, await db_helper.get_user_full_name(user_id), time.time(), '9a')
-        )
-        await db.commit()
-    await message.answer("Информация в 9А успешно добавлена.")
+        try:
+            images_entry = random_filename if message.photo else ""
+            await db.execute(
+                "INSERT INTO information (info, sender, timestamp, class_name, images) VALUES (?, ?, ?, ?, ?)",
+                (info_text, await db_helper.get_user_full_name(user_id), time.time(), '9a', images_entry)
+            )
+            await db.commit()
+            await message.answer("Информация в 9А успешно добавлена.")
+        except aiosqlite.Error as e:
+            await message.answer("Произошла ошибка при добавлении работы. Пожалуйста, попробуйте снова.")
+            print(f"Ошибка базы данных: {e}")
+    
     await state.clear()
     await db_helper.show_9a_main_menu(message, state)
 
@@ -142,18 +163,36 @@ async def view_info(message: types.Message, state: FSMContext):
         return
     now = time.time()
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        async with db.execute("SELECT info, sender, timestamp FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9a')) as cursor:
+        async with db.execute("SELECT info, sender, timestamp, images FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9a')) as cursor:
             recent_info = await cursor.fetchall()
     
     recent_info = sorted(recent_info, key=lambda i: i[2])
     if not recent_info:
         await message.answer("Нет доступной информации в 9А.")
     else:
-        for info, sender, timestamp in recent_info:
-            timestamp_dt = datetime.datetime.fromtimestamp(timestamp)
-            await message.answer(
-                f"{info}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
-            )
+        for work, sender, timestamp, images in recent_info:
+            try:
+                timestamp_dt = datetime.datetime.fromtimestamp(float(timestamp))
+                response_text = f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
+                
+                # Создание inline-кнопки, если поле images не пустое
+                if images and images.strip():  # Проверяем, что поле не пустое
+                    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text='Посмотреть изображение',
+                                callback_data=f'image_{images.strip()}'
+                            )
+                        ]
+                    ])
+                    await message.answer(response_text, reply_markup=keyboard)
+                else:
+                    await message.answer(response_text)
+                    
+            except Exception as e:
+                await message.answer("Ошибка при обработке времени. Пожалуйста, попробуйте позже.")
+                print(f"Ошибка: {e}")
+    
     await message.answer("Возвращаюсь в главное меню.")
     await db_helper.show_9a_main_menu(message, state)
 
@@ -244,7 +283,20 @@ async def add_info(message: types.Message, state: FSMContext):
 
 @router.message(Info9BState.waiting_for_info_entry)
 async def process_info_entry(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
+    random_filename = f'photo_{uuid.uuid4()}.jpg'
+    info_text = ""
+
+    if message.photo:
+        await message.bot.download(file=message.photo[-1].file_id, destination=f'images_data/{random_filename}')
+        if message.caption:
+            info_text = message.caption
+        else:
+            info_text = "(без описания)"
+
+    elif message.text:
+        info_text = message.text
+
+    if message.text and message.text.lower() == "отмена":
         # Возвращаем пользователя в подменю 'Информация'
         user_class = await db_helper.get_user_class(message.from_user.id)
         if user_class in [ADMIN, OWNER]:
@@ -278,12 +330,18 @@ async def process_info_entry(message: types.Message, state: FSMContext):
 
     user_id = message.from_user.id
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        await db.execute(
-            "INSERT INTO information (info, sender, timestamp, class_name) VALUES (?, ?, ?, ?)",
-            (message.text, await db_helper.get_user_full_name(user_id), time.time(), '9b')
-        )
-        await db.commit()
-    await message.answer("Информация в 9Б успешно добавлена.")
+        try:
+            images_entry = random_filename if message.photo else ""
+            await db.execute(
+                "INSERT INTO information (info, sender, timestamp, class_name, images) VALUES (?, ?, ?, ?, ?)",
+                (info_text, await db_helper.get_user_full_name(user_id), time.time(), '9b', images_entry)
+            )
+            await db.commit()
+            await message.answer("Информация в 9Б успешно добавлена.")
+        except aiosqlite.Error as e:
+            await message.answer("Произошла ошибка при добавлении работы. Пожалуйста, попробуйте снова.")
+            print(f"Ошибка базы данных: {e}")
+    
     await state.clear()
     await db_helper.show_9b_main_menu(message, state)
 
@@ -296,22 +354,35 @@ async def view_info(message: types.Message, state: FSMContext):
         return
     now = time.time()
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        async with db.execute("SELECT info, sender, timestamp FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9b')) as cursor:
+        async with db.execute("SELECT info, sender, timestamp, images FROM information WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9b')) as cursor:
             recent_info = await cursor.fetchall()
     
     recent_info = sorted(recent_info, key=lambda i: i[2])
     if not recent_info:
         await message.answer("Нет доступной информации в 9Б.")
     else:
-        for info, sender, timestamp in recent_info:
-            timestamp_dt = datetime.datetime.fromtimestamp(timestamp)
-            await message.answer(
-                f"{info}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
-            )
-    await message.answer("Возвращаюсь в главное меню.")
-    await db_helper.show_9b_main_menu(message, state)
+        for work, sender, timestamp, images in recent_info:
+            try:
+                timestamp_dt = datetime.datetime.fromtimestamp(float(timestamp))
+                response_text = f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
+                
+                # Создание inline-кнопки, если поле images не пустое
+                if images and images.strip():  # Проверяем, что поле не пустое
+                    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text='Посмотреть изображение',
+                                callback_data=f'image_{images.strip()}'
+                            )
+                        ]
+                    ])
+                    await message.answer(response_text, reply_markup=keyboard)
+                else:
+                    await message.answer(response_text)
+                    
+            except Exception as e:
+                await message.answer("Ошибка при обработке времени. Пожалуйста, попробуйте позже.")
+                print(f"Ошибка: {e}")
 
-@router.message(Info9BState.waiting_for_info_action, F.text == "Назад")
-async def handle_back_to_main_menu(message: types.Message, state: FSMContext):
-    await state.clear()
+    await message.answer("Возвращаюсь в главное меню.")
     await db_helper.show_9b_main_menu(message, state)

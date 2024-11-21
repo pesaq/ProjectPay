@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
+import uuid
+
 from core.settings import get_settings
 
 from database.db_helper import db_helper
@@ -88,35 +90,37 @@ async def add_work(message: types.Message, state: FSMContext):
 
 @router.message(Work9AState.waiting_for_work_entry)
 async def process_work_entry(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
-        # Возвращаем пользователя в подменю 'Домашние работы'
+    random_filename = f'photo_{uuid.uuid4()}.jpg'
+    work_text = ""
+    
+    if message.photo:
+        await message.bot.download(file=message.photo[-1].file_id, destination=f'images_data/{random_filename}')
+        if message.caption:
+            work_text = message.caption
+        else:
+            work_text = "(без описания)"
+    
+    elif message.text:
+        work_text = message.text
+    
+    if message.text and message.text.lower() == "отмена":
         user_class = await db_helper.get_user_class(message.from_user.id)
         if user_class in [ADMIN, OWNER]:
             markup = types.ReplyKeyboardMarkup(keyboard=[
                 [
-                    types.KeyboardButton(
-                        text='Добавить работу (9А)'
-                    ),
-                    types.KeyboardButton(
-                        text='Посмотреть все работы (9А)'
-                    ),
-                    types.KeyboardButton(
-                        text='Назад'
-                    )
+                    types.KeyboardButton(text='Добавить работу (9А)'),
+                    types.KeyboardButton(text='Посмотреть все работы (9А)'),
+                    types.KeyboardButton(text='Назад')
                 ]
             ], resize_keyboard=True)
         else:
             markup = types.ReplyKeyboardMarkup(keyboard=[
-            [
-                types.KeyboardButton(
-                    text='Посмотреть все работы (9А)'
-                ),
-                types.KeyboardButton(
-                    text='Назад'
-                )
-            ]
-        ], resize_keyboard=True)
-
+                [
+                    types.KeyboardButton(text='Посмотреть все работы (9А)'),
+                    types.KeyboardButton(text='Назад')
+                ]
+            ], resize_keyboard=True)
+        
         await message.answer("Возвращены в подменю 'Домашние работы'.", reply_markup=markup)
         await state.set_state(Work9AState.waiting_for_work_action)
         return
@@ -124,15 +128,17 @@ async def process_work_entry(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
         try:
+            images_entry = random_filename if message.photo else ""
             await db.execute(
-                "INSERT INTO works (work, sender, class_name, timestamp) VALUES (?, ?, ?, ?)",
-                (message.text, await db_helper.get_user_full_name(user_id), '9a', time.time())
+                "INSERT INTO works (work, sender, class_name, timestamp, images) VALUES (?, ?, ?, ?, ?)",
+                (work_text, await db_helper.get_user_full_name(user_id), '9a', time.time(), images_entry)
             )
             await db.commit()
             await message.answer("Работа в 9А успешно добавлена.")
         except aiosqlite.Error as e:
             await message.answer("Произошла ошибка при добавлении работы. Пожалуйста, попробуйте снова.")
             print(f"Ошибка базы данных: {e}")
+    
     await state.clear()
     await db_helper.show_9a_main_menu(message, state)
 
@@ -145,25 +151,40 @@ async def view_works(message: types.Message, state: FSMContext):
         return
     now = time.time()
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        async with db.execute("SELECT work, sender, timestamp FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9a')) as cursor:
+        async with db.execute(
+                "SELECT work, sender, timestamp, images FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC",
+                (now - 8 * 24 * 60 * 60, '9a')) as cursor:
             recent_works = await cursor.fetchall()
 
     recent_works = sorted(recent_works, key=lambda i: i[2])
     if not recent_works:
         await message.answer("Нет доступных работ.")
     else:
-        for work, sender, timestamp in recent_works:
+        for work, sender, timestamp, images in recent_works:
             try:
                 timestamp_dt = datetime.datetime.fromtimestamp(float(timestamp))
-                await message.answer(
-                    f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
-                )
+                response_text = f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
+                
+                # Создание inline-кнопки, если поле images не пустое
+                if images and images.strip():  # Проверяем, что поле не пустое
+                    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text='Посмотреть изображение',
+                                callback_data=f'image_{images.strip()}'
+                            )
+                        ]
+                    ])
+                    await message.answer(response_text, reply_markup=keyboard)
+                else:
+                    await message.answer(response_text)
+                    
             except Exception as e:
                 await message.answer("Ошибка при обработке времени. Пожалуйста, попробуйте позже.")
                 print(f"Ошибка: {e}")
+
     await message.answer("Возвращаюсь в главное меню.")
     await db_helper.show_9a_main_menu(message, state)
-
 
 
 
@@ -246,35 +267,37 @@ async def add_work(message: types.Message, state: FSMContext):
 
 @router.message(Work9BState.waiting_for_work_entry)
 async def process_work_entry(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
-        # Возвращаем пользователя в подменю 'Домашние работы'
+    random_filename = f'photo_{uuid.uuid4()}.jpg'
+    work_text = ""
+    
+    if message.photo:
+        await message.bot.download(file=message.photo[-1].file_id, destination=f'images_data/{random_filename}')
+        if message.caption:
+            work_text = message.caption
+        else:
+            work_text = "(без описания)"
+    
+    elif message.text:
+        work_text = message.text
+    
+    if message.text and message.text.lower() == "отмена":
         user_class = await db_helper.get_user_class(message.from_user.id)
         if user_class in [ADMIN, OWNER]:
             markup = types.ReplyKeyboardMarkup(keyboard=[
                 [
-                    types.KeyboardButton(
-                        text='Добавить работу (9Б)'
-                    ),
-                    types.KeyboardButton(
-                        text='Посмотреть все работы (9Б)'
-                    ),
-                    types.KeyboardButton(
-                        text='Назад'
-                    )
+                    types.KeyboardButton(text='Добавить работу (9Б)'),
+                    types.KeyboardButton(text='Посмотреть все работы (9Б)'),
+                    types.KeyboardButton(text='Назад')
                 ]
             ], resize_keyboard=True)
         else:
             markup = types.ReplyKeyboardMarkup(keyboard=[
-            [
-                types.KeyboardButton(
-                    text='Посмотреть все работы (9Б)'
-                ),
-                types.KeyboardButton(
-                    text='Назад'
-                )
-            ]
-        ], resize_keyboard=True)
-
+                [
+                    types.KeyboardButton(text='Посмотреть все работы (9Б)'),
+                    types.KeyboardButton(text='Назад')
+                ]
+            ], resize_keyboard=True)
+        
         await message.answer("Возвращены в подменю 'Домашние работы'.", reply_markup=markup)
         await state.set_state(Work9BState.waiting_for_work_action)
         return
@@ -282,15 +305,17 @@ async def process_work_entry(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
         try:
+            images_entry = random_filename if message.photo else ""
             await db.execute(
-                "INSERT INTO works (work, sender, class_name, timestamp) VALUES (?, ?, ?, ?)",
-                (message.text, await db_helper.get_user_full_name(user_id), '9b', time.time())
+                "INSERT INTO works (work, sender, class_name, timestamp, images) VALUES (?, ?, ?, ?, ?)",
+                (work_text, await db_helper.get_user_full_name(user_id), '9b', time.time(), images_entry)
             )
             await db.commit()
             await message.answer("Работа в 9Б успешно добавлена.")
         except aiosqlite.Error as e:
             await message.answer("Произошла ошибка при добавлении работы. Пожалуйста, попробуйте снова.")
             print(f"Ошибка базы данных: {e}")
+    
     await state.clear()
     await db_helper.show_9b_main_menu(message, state)
 
@@ -303,21 +328,52 @@ async def view_works(message: types.Message, state: FSMContext):
         return
     now = time.time()
     async with aiosqlite.connect('bot_data/bot_data.db') as db:
-        async with db.execute("SELECT work, sender, timestamp FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC", (now - 8 * 24 * 60 * 60, '9b')) as cursor:
+        async with db.execute(
+                "SELECT work, sender, timestamp, images FROM works WHERE timestamp >= ? AND class_name = ? ORDER BY timestamp DESC",
+                (now - 8 * 24 * 60 * 60, '9b')) as cursor:
             recent_works = await cursor.fetchall()
 
     recent_works = sorted(recent_works, key=lambda i: i[2])
     if not recent_works:
         await message.answer("Нет доступных работ.")
     else:
-        for work, sender, timestamp in recent_works:
+        for work, sender, timestamp, images in recent_works:
             try:
                 timestamp_dt = datetime.datetime.fromtimestamp(float(timestamp))
-                await message.answer(
-                    f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
-                )
+                response_text = f"{work}\n\nОтправлено: {sender}\nДата: {timestamp_dt.strftime('%d-%m-%Y')}, Время: {timestamp_dt.strftime('%H:%M')}"
+                
+                # Создание inline-кнопки, если поле images не пустое
+                if images and images.strip():  # Проверяем, что поле не пустое
+                    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text='Посмотреть изображение',
+                                callback_data=f'image_{images.strip()}'
+                            )
+                        ]
+                    ])
+                    await message.answer(response_text, reply_markup=keyboard)
+                else:
+                    await message.answer(response_text)
+                    
             except Exception as e:
                 await message.answer("Ошибка при обработке времени. Пожалуйста, попробуйте позже.")
                 print(f"Ошибка: {e}")
+
     await message.answer("Возвращаюсь в главное меню.")
     await db_helper.show_9b_main_menu(message, state)
+
+@router.callback_query(lambda cb: cb.data.startswith('image_'))
+async def send_image(callback_query: types.CallbackQuery):
+    image_name = callback_query.data.split('_', 1)[1]
+    image_path = f'images_data/{image_name}'
+
+    try:
+        # Создаем InputFile из пути к изображению
+        photo = types.FSInputFile(image_path)
+        await callback_query.message.answer_photo(photo=photo)
+    except FileNotFoundError:
+        await callback_query.answer("Изображение не найдено.")
+    except Exception as e:
+        await callback_query.answer("Произошла ошибка при отправке изображения.")
+        print(f"Ошибка: {e}")

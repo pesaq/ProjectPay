@@ -30,7 +30,8 @@ class DataBaseHelper:
                     info TEXT,
                     sender TEXT,
                     timestamp REAL,
-                    class_name TEXT
+                    class_name TEXT,
+                    images TEXT
                 )
             ''')
 
@@ -85,6 +86,7 @@ class DataBaseHelper:
                     work TEXT NOT NULL,
                     sender TEXT NOT NULL,
                     class_name TEXT,
+                    images TEXT,
                     timestamp REAL NOT NULL
                 )
             ''')
