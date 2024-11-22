@@ -285,7 +285,7 @@ async def process_fio(message: types.Message, state: FSMContext):
     await db_helper.show_choose_class_menu(message)
     await state.clear()
 
-@router.message(Command(commands=['token ']))
+@router.message(Command(commands=['token']))
 async def process_token(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     token = message.text.split(" ")[1]
